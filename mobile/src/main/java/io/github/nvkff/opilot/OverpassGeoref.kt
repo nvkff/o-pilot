@@ -17,12 +17,23 @@ object OverpassGeoref {
         val lonR = rDeg / cos(Math.toRadians(lat)).coerceAtLeast(0.2)
         val w = lon - lonR; val e = lon + lonR
         val q = "[out:json][timeout:20];(way[\"highway\"]($s,$w,$n,$e);way[\"natural\"=\"water\"]($s,$w,$n,$e);way[\"waterway\"]($s,$w,$n,$e););out geom;"
-        val conn = (URL("https://overpass-api.de/api/interpreter").openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"; doOutput = true; connectTimeout = 15000; readTimeout = 25000
-            setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        val urls = listOf("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter")
+        var body: String? = null
+        var lastErr = "Network error"
+        for (u in urls) {
+            try {
+                val conn = (URL(u).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"; doOutput = true; connectTimeout = 12000; readTimeout = 20000
+                    setRequestProperty("User-Agent", "O-Pilot/1.0")
+                    setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                }
+                conn.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }
+                if (conn.responseCode == 200) { body = conn.inputStream.bufferedReader().readText(); break }
+                else lastErr = "HTTP ${conn.responseCode}"
+            } catch (ex: Exception) { lastErr = ex.message ?: "Err" }
         }
-        conn.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }
-        val els = JSONObject(conn.inputStream.bufferedReader().readText()).optJSONArray("elements") ?: return emptyList()
+        if (body == null) throw RuntimeException(lastErr)
+        val els = JSONObject(body).optJSONArray("elements") ?: return emptyList()
         val out = mutableListOf<OsmWay>()
         for (i in 0 until els.length()) {
             val el = els.getJSONObject(i)
@@ -59,16 +70,17 @@ object OverpassGeoref {
         val osmGray = Mat(); val osmRgba = Mat()
         Utils.bitmapToMat(osmBmp, osmRgba); Imgproc.cvtColor(osmRgba, osmGray, Imgproc.COLOR_RGBA2GRAY)
         osmRgba.release(); osmBmp.recycle()
-        val scanRgba = Mat(); val scanGray = Mat(); val scanMask = Mat()
+        val scanRgba = Mat(); val scanGray = Mat(); val scanEdges = Mat()
         Utils.bitmapToMat(scanBmp, scanRgba); Imgproc.cvtColor(scanRgba, scanGray, Imgproc.COLOR_RGBA2GRAY)
-        Core.bitwise_not(scanGray, scanMask); Imgproc.threshold(scanMask, scanMask, 90.0, 255.0, Imgproc.THRESH_BINARY)
+        Imgproc.Canny(scanGray, scanEdges, 60.0, 160.0)
         scanRgba.release(); scanGray.release()
         var best: GeoPlacement? = null
         for (wM in listOf(900.0, 1200.0, 1500.0, 1800.0, 2200.0, 2600.0)) {
             val tw = (wM / mPerPx).toInt()
             val th = (tw * scanBmp.height.toDouble() / scanBmp.width).toInt()
-            if (minOf(tw,th)<40) continue; if (maxOf(tw,th)>=gridSz) continue
-            val tpl = Mat(); Imgproc.resize(scanMask, tpl, Size(tw.toDouble(), th.toDouble()))
+            if (minOf(tw, th) < 40) continue
+            if (maxOf(tw, th) >= gridSz) continue
+            val tpl = Mat(); Imgproc.resize(scanEdges, tpl, Size(tw.toDouble(), th.toDouble()))
             val res = Mat()
             Imgproc.matchTemplate(osmGray, tpl, res, Imgproc.TM_CCOEFF_NORMED)
             val mm = Core.minMaxLoc(res)
@@ -78,7 +90,7 @@ object OverpassGeoref {
             }
             tpl.release(); res.release()
         }
-        osmGray.release(); scanMask.release()
+        osmGray.release(); scanEdges.release()
         return best
     }
 }
