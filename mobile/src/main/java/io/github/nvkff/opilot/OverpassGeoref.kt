@@ -12,33 +12,29 @@ data class OsmWay(val type: Int, val pts: List<Pair<Double, Double>>)
 data class GeoPlacement(val centerLat: Double, val centerLon: Double, val widthMeters: Double, val score: Double)
 
 object OverpassGeoref {
-    fun fetchWays(lat: Double, lon: Double, rDeg: Double = 0.018): List<OsmWay> {
+    fun fetchWays(lat: Double, lon: Double, rDeg: Double = 0.013): List<OsmWay> {
         val s = lat - rDeg; val n = lat + rDeg
         val lonR = rDeg / cos(Math.toRadians(lat)).coerceAtLeast(0.2)
         val w = lon - lonR; val e = lon + lonR
-        val q = "[out:json][timeout:20];(way[\"highway\"]($s,$w,$n,$e);way[\"natural\"=\"water\"]($s,$w,$n,$e);way[\"waterway\"]($s,$w,$n,$e););out geom;"
-        val urls = listOf("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter")
-        var body: String? = null
-        var lastErr = "Network error"
+        val q = "[out:json][timeout:15];(way[\"highway\"]($s,$w,$n,$e);way[\"natural\"=\"water\"]($s,$w,$n,$e);way[\"waterway\"]($s,$w,$n,$e););out geom;"
+        val urls = listOf("https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://lz4.overpass-api.de/api/interpreter", "https://overpass-api.de/api/interpreter")
+        var body: String? = null; var lastErr = "Network error"
         for (u in urls) {
             try {
                 val conn = (URL(u).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; doOutput = true; connectTimeout = 12000; readTimeout = 20000
+                    requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 16000
                     setRequestProperty("User-Agent", "O-Pilot/1.0")
                     setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
                 }
                 conn.outputStream.use { it.write(("data=" + URLEncoder.encode(q, "UTF-8")).toByteArray()) }
-                if (conn.responseCode == 200) { body = conn.inputStream.bufferedReader().readText(); break }
-                else lastErr = "HTTP ${conn.responseCode}"
+                if (conn.responseCode == 200) { body = conn.inputStream.bufferedReader().readText(); break } else lastErr = "HTTP ${conn.responseCode}"
             } catch (ex: Exception) { lastErr = ex.message ?: "Err" }
         }
         if (body == null) throw RuntimeException(lastErr)
         val els = JSONObject(body).optJSONArray("elements") ?: return emptyList()
         val out = mutableListOf<OsmWay>()
         for (i in 0 until els.length()) {
-            val el = els.getJSONObject(i)
-            val tags = el.optJSONObject("tags") ?: continue
-            val geom = el.optJSONArray("geometry") ?: continue
+            val el = els.getJSONObject(i); val tags = el.optJSONObject("tags") ?: continue; val geom = el.optJSONArray("geometry") ?: continue
             val t = if (tags.has("highway")) 1 else 2
             val pts = ArrayList<Pair<Double, Double>>(geom.length())
             for (j in 0 until geom.length()) { val g = geom.getJSONObject(j); pts.add(g.getDouble("lat") to g.getDouble("lon")) }
@@ -47,9 +43,9 @@ object OverpassGeoref {
         return out
     }
 
-    fun autoAlign(scanBmp: Bitmap, cLat: Double, cLon: Double, ways: List<OsmWay>): GeoPlacement? {
+    fun autoAlign(scanBmp: Bitmap, cLat: Double, cLon: Double, ways: List<OsmWay>, scaleDenom: Int = 0): GeoPlacement? {
         if (ways.isEmpty()) return null
-        val areaM = 3600.0; val gridSz = 900; val mPerPx = areaM / gridSz
+        val areaM = 2800.0; val gridSz = 700; val mPerPx = areaM / gridSz
         val dLat = areaM / 111320.0
         val dLon = areaM / (111320.0 * cos(Math.toRadians(cLat)).coerceAtLeast(0.2))
         val minLat = cLat - dLat / 2.0; val minLon = cLon - dLon / 2.0
@@ -72,17 +68,15 @@ object OverpassGeoref {
         osmRgba.release(); osmBmp.recycle()
         val scanRgba = Mat(); val scanGray = Mat(); val scanEdges = Mat()
         Utils.bitmapToMat(scanBmp, scanRgba); Imgproc.cvtColor(scanRgba, scanGray, Imgproc.COLOR_RGBA2GRAY)
-        Imgproc.Canny(scanGray, scanEdges, 60.0, 160.0)
-        scanRgba.release(); scanGray.release()
+        Imgproc.Canny(scanGray, scanEdges, 60.0, 160.0); scanRgba.release(); scanGray.release()
+        val widths = if (scaleDenom > 0) listOf(0.20, 0.24, 0.28, 0.32, 0.36).map { it * scaleDenom } else listOf(900.0, 1200.0, 1500.0, 1800.0, 2200.0, 2500.0)
         var best: GeoPlacement? = null
-        for (wM in listOf(900.0, 1200.0, 1500.0, 1800.0, 2200.0, 2600.0)) {
-            val tw = (wM / mPerPx).toInt()
-            val th = (tw * scanBmp.height.toDouble() / scanBmp.width).toInt()
+        for (wM in widths) {
+            val tw = (wM / mPerPx).toInt(); val th = (tw * scanBmp.height.toDouble() / scanBmp.width).toInt()
             if (minOf(tw, th) < 40) continue
             if (maxOf(tw, th) >= gridSz) continue
             val tpl = Mat(); Imgproc.resize(scanEdges, tpl, Size(tw.toDouble(), th.toDouble()))
-            val res = Mat()
-            Imgproc.matchTemplate(osmGray, tpl, res, Imgproc.TM_CCOEFF_NORMED)
+            val res = Mat(); Imgproc.matchTemplate(osmGray, tpl, res, Imgproc.TM_CCOEFF_NORMED)
             val mm = Core.minMaxLoc(res)
             if (mm.maxVal > (best?.score ?: -999.0)) {
                 val cx = mm.maxLoc.x + tw / 2.0; val cy = mm.maxLoc.y + th / 2.0

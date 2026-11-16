@@ -25,6 +25,7 @@ class GeorefActivity : AppCompatActivity() {
     private lateinit var tvInfo: TextView
     private var scanBmp: Bitmap? = null
     private var isSat = false
+    private var scaleDenom = 0
     private val esriSat = object : OnlineTileSourceBase("EsriSat", 1, 19, 256, ".jpg", arrayOf("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/")) {
         override fun getTileURLString(idx: Long) = baseUrl + MapTileIndex.getZoom(idx) + "/" + MapTileIndex.getY(idx) + "/" + MapTileIndex.getX(idx)
     }
@@ -33,32 +34,27 @@ class GeorefActivity : AppCompatActivity() {
         Configuration.getInstance().load(this, getSharedPreferences("osmdroid", MODE_PRIVATE))
         Configuration.getInstance().userAgentValue = packageName
         setContentView(R.layout.activity_georef)
-        mapView = findViewById(R.id.mapView)
-        overlayView = findViewById(R.id.overlayView)
-        tvInfo = findViewById(R.id.tvGeorefInfo)
-        overlayView.mapViewRef = mapView
-        mapView.setTileSource(TileSourceFactory.MAPNIK)
-        mapView.setMultiTouchControls(true)
+        mapView = findViewById(R.id.mapView); overlayView = findViewById(R.id.overlayView); tvInfo = findViewById(R.id.tvGeorefInfo)
+        overlayView.mapViewRef = mapView; mapView.setTileSource(TileSourceFactory.MAPNIK); mapView.setMultiTouchControls(true)
         mapView.addMapListener(object : MapListener {
             override fun onScroll(e: ScrollEvent?): Boolean { overlayView.invalidate(); return false }
             override fun onZoom(e: ZoomEvent?): Boolean { overlayView.invalidate(); return false }
         })
-        centerMap()
+        val startGeo = centerMap()
+        scaleDenom = intent.getIntExtra("scale", 0)
         scanBmp = BitmapFactory.decodeFile(File(filesDir, "current_map.png").absolutePath)
         val arr = intent.getFloatArrayExtra("cps") ?: floatArrayOf()
         val pts = (0 until arr.size / 2).map { PointF(arr[it * 2], arr[it * 2 + 1]) }
-        val c = mapView.mapCenter
-        scanBmp?.let { overlayView.setMap(it, pts, GeoPoint(c.latitude, c.longitude)) }
+        scanBmp?.let { overlayView.setMap(it, pts, startGeo); overlayView.widthMeters = if (scaleDenom > 0) scaleDenom * 0.28 else 1800.0 }
+        if (scaleDenom > 0) tvInfo.text = "Масштаб: 1:$scaleDenom · Наведи карту и жми Авто"
         findViewById<SeekBar>(R.id.seekAlpha).setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(s: SeekBar?, p: Int, f: Boolean) = overlayView.setOverlayAlpha(p)
             override fun onStartTrackingTouch(s: SeekBar?) {}
             override fun onStopTrackingTouch(s: SeekBar?) {}
         })
         val btnLayer = findViewById<Button>(R.id.btnLayer)
-        btnLayer.setOnClickListener {
-            isSat = !isSat; mapView.setTileSource(if (isSat) esriSat else TileSourceFactory.MAPNIK)
-            btnLayer.text = if (isSat) "Схема OSM" else "Спутник"
-        }
+        btnLayer.setOnClickListener { isSat = !isSat; mapView.setTileSource(if (isSat) esriSat else TileSourceFactory.MAPNIK); btnLayer.text = if (isSat) "Схема OSM" else "Спутник" }
+        findViewById<Button>(R.id.btnBringHere).setOnClickListener { val c = mapView.mapCenter; overlayView.centerGeo = GeoPoint(c.latitude, c.longitude); overlayView.invalidate() }
         val btnMode = findViewById<Button>(R.id.btnMode)
         btnMode.setOnClickListener {
             overlayView.mode = when (overlayView.mode) {
@@ -70,14 +66,14 @@ class GeorefActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnAutoAlign).setOnClickListener { runAutoAlign() }
         findViewById<Button>(R.id.btnDone).setOnClickListener { finishGeoref() }
     }
-    private fun centerMap() {
-        mapView.controller.setZoom(13.5)
+    private fun centerMap(): GeoPoint {
+        mapView.controller.setZoom(13.5); var target = GeoPoint(55.7558, 37.6173)
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             val lm = getSystemService(Context.LOCATION_SERVICE) as LocationManager
             val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-            if (loc != null) { mapView.controller.setCenter(GeoPoint(loc.latitude, loc.longitude)); return }
+            if (loc != null) target = GeoPoint(loc.latitude, loc.longitude)
         } else requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 101)
-        mapView.controller.setCenter(GeoPoint(55.7558, 37.6173))
+        mapView.controller.setCenter(target); return target
     }
     private fun runAutoAlign() {
         val bmp = scanBmp ?: return; val c = mapView.mapCenter
@@ -85,22 +81,18 @@ class GeorefActivity : AppCompatActivity() {
         CoroutineScope(Dispatchers.Main).launch {
             var err: String? = null
             val res = withContext(Dispatchers.IO) {
-                try {
-                    val ways = OverpassGeoref.fetchWays(c.latitude, c.longitude)
-                    OverpassGeoref.autoAlign(bmp, c.latitude, c.longitude, ways)
-                } catch (e: Exception) { err = e.message; null }
+                try { OverpassGeoref.autoAlign(bmp, c.latitude, c.longitude, OverpassGeoref.fetchWays(c.latitude, c.longitude), scaleDenom) }
+                catch (e: Exception) { err = e.message; null }
             }
             if (res != null) {
                 val gp = GeoPoint(res.centerLat, res.centerLon)
-                overlayView.setPlacement(gp, res.widthMeters)
-                mapView.controller.animateTo(gp)
+                overlayView.setPlacement(gp, res.widthMeters); mapView.controller.animateTo(gp)
                 tvInfo.text = String.format(Locale.US, "Авто-привязка: %.2f (подправь 2п)", res.score)
             } else tvInfo.text = "Ошибка OSM: ${err ?: "нет совпадения"}"
         }
     }
     private fun finishGeoref() {
-        val cps = overlayView.exportControlPoints(mapView.projection)
-        val arr = JSONArray()
+        val cps = overlayView.exportControlPoints(mapView.projection); val arr = JSONArray()
         cps.forEach { cp -> arr.put(JSONObject().put("id", cp.id).put("label", cp.label).put("lat", cp.lat).put("lon", cp.lon).put("taken", false)) }
         File(filesDir, "current_route.json").writeText(arr.toString())
         val summary = if (cps.isEmpty()) "КП не отмечены" else cps.joinToString("\n") { String.format(Locale.US, "%s: %.5f, %.5f", it.label, it.lat, it.lon) }
