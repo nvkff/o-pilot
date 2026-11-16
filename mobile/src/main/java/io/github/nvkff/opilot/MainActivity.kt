@@ -24,6 +24,7 @@ class MainActivity : AppCompatActivity() {
     private var detectedLabels: List<String> = emptyList()
     private var detectedScale = 0
     private var isAnalyzed = false
+    private val prefs by lazy { getSharedPreferences("opilot_prefs", MODE_PRIVATE) }
 
     private val scannerLauncher = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
         if (res.resultCode == RESULT_OK) GmsDocumentScanningResult.fromActivityResultIntent(res.data)?.pages?.firstOrNull()?.imageUri?.let { processUri(it, false) }
@@ -34,10 +35,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState); setContentView(R.layout.activity_main)
         tvStatus = findViewById(R.id.tvStatus); ivPreview = findViewById(R.id.ivPreview); btnAnalyze = findViewById(R.id.btnAnalyze)
         tvStatus.text = if (OpenCVLoader.initLocal()) "OpenCV 4.12 готов к работе" else "Ошибка OpenCV"
+        findViewById<Button>(R.id.btnGeminiKey).setOnClickListener { askApiKey() }
         findViewById<Button>(R.id.btnScanCamera).setOnClickListener { startScanner() }
         findViewById<Button>(R.id.btnPickGallery).setOnClickListener { askGalleryMode() }
         findViewById<Button>(R.id.btnImportPdf).setOnClickListener { pdfLauncher.launch(arrayOf("application/pdf")) }
         btnAnalyze.setOnClickListener { if (!isAnalyzed) runAnalysis() else openGeoref() }
+    }
+    private fun askApiKey() {
+        val et = EditText(this).apply { hint = "AQ...."; setText(prefs.getString("gemini_key", "")) }
+        AlertDialog.Builder(this).setTitle("Ключ Google AI Studio").setView(et)
+            .setPositiveButton("Сохранить") { _, _ -> prefs.edit().putString("gemini_key", et.text.toString().trim()).apply() }
+            .setNeutralButton("Очистить") { _, _ -> prefs.edit().remove("gemini_key").apply() }.show()
     }
     private fun askGalleryMode() {
         AlertDialog.Builder(this).setTitle("Загрузка из галереи").setMessage("Если фото под углом, лучше открыть сканер.")
@@ -58,31 +66,32 @@ class MainActivity : AppCompatActivity() {
             }
             if (bmp != null) {
                 currentBitmap = bmp; isAnalyzed = false; detectedScale = 0; detectedLabels = emptyList(); ivPreview.setImageBitmap(bmp)
-                btnAnalyze.text = "Далее: поиск КП и севера (OpenCV)"; btnAnalyze.visibility = View.VISIBLE; tvStatus.text = "Карта: ${bmp.width}x${bmp.height} px"
+                btnAnalyze.text = "Далее: поиск КП и севера"; btnAnalyze.visibility = View.VISIBLE; tvStatus.text = "Карта: ${bmp.width}x${bmp.height} px"
             } else tvStatus.text = "Не удалось открыть файл"
         }
     }
     private fun runAnalysis() {
-        val bmp = currentBitmap ?: return; tvStatus.text = "Анализ КП, линий, легенды и масштаба..."
+        val bmp = currentBitmap ?: return; val key = prefs.getString("gemini_key", "").orEmpty()
+        tvStatus.text = if (key.isNotEmpty()) "OpenCV + Gemini AI анализ..." else "Анализ OpenCV..."
         CoroutineScope(Dispatchers.Main).launch {
             val res = withContext(Dispatchers.Default) { MapAnalyzer.analyze(bmp) }
             withContext(Dispatchers.IO) { MapLoader.saveWorkingMap(this@MainActivity, res.alignedBitmap) }
-            withContext(Dispatchers.Default) {
-                CourseOrderer.orderAndExtract(res.alignedBitmap, res.controlPoints) { course ->
-                    CoroutineScope(Dispatchers.Main).launch {
-                        currentBitmap = res.alignedBitmap; detectedCps = course.points; detectedLabels = course.labels; detectedScale = course.scale; isAnalyzed = true
-                        val marked = withContext(Dispatchers.Default) { MapAnalyzer.drawMarkers(res.alignedBitmap, course.points, course.labels, res.finishPoint) }
-                        ivPreview.setImageBitmap(marked); btnAnalyze.text = "Далее: привязка к карте"
-                        val scTxt = if (course.scale > 0) "1:${course.scale}" else "нет"
-                        tvStatus.text = "КП: ${course.points.size} · Легенда: ${course.legendCount} · Масштаб: $scTxt"
-                    }
-                }
+            var pts = res.controlPoints; var lbls = pts.indices.map { "${it + 1}" }; var fin = res.finishPoint; var legCnt = 0; var gErr: String? = null
+            if (key.isNotEmpty()) {
+                val g = withContext(Dispatchers.IO) { GeminiCourseAnalyzer.analyze(res.alignedBitmap, res.controlPoints, key) }
+                if (g.err == null) { pts = g.points; lbls = g.labels; fin = g.finish ?: fin; legCnt = g.legendCount } else gErr = g.err
+            }
+            ScaleDetector.detect(res.alignedBitmap) { sc ->
+                detectedScale = sc; currentBitmap = res.alignedBitmap; detectedCps = pts; detectedLabels = lbls; isAnalyzed = true
+                ivPreview.setImageBitmap(MapAnalyzer.drawMarkers(res.alignedBitmap, pts, lbls, fin))
+                btnAnalyze.text = "Далее: привязка к карте"
+                val scT = if (sc > 0) "1:$sc" else "нет"
+                tvStatus.text = if (gErr != null) "КП: ${pts.size} · Масштаб: $scT · AI: $gErr" else "КП: ${pts.size} · Легенда: $legCnt · Масштаб: $scT"
             }
         }
     }
     private fun openGeoref() {
-        val arr = FloatArray(detectedCps.size * 2)
-        detectedCps.forEachIndexed { i, p -> arr[i * 2] = p.x; arr[i * 2 + 1] = p.y }
+        val arr = FloatArray(detectedCps.size * 2); detectedCps.forEachIndexed { i, p -> arr[i * 2] = p.x; arr[i * 2 + 1] = p.y }
         startActivity(Intent(this, GeorefActivity::class.java).putExtra("cps", arr).putStringArrayListExtra("labels", ArrayList(detectedLabels)).putExtra("scale", detectedScale))
     }
 }
