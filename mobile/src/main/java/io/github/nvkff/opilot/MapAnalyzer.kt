@@ -48,41 +48,39 @@ object MapAnalyzer {
     }
     private fun detectMagentaCps(rgba: Mat): List<PointF> {
         val bgr = Mat(); val hsv = Mat(); val m1 = Mat(); val m2 = Mat(); val mask = Mat(); val blur = Mat(); val circles = Mat()
-        Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
-        Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV)
-        Core.inRange(hsv, Scalar(135.0, 45.0, 60.0), Scalar(180.0, 255.0, 255.0), m1)
-        Core.inRange(hsv, Scalar(0.0, 45.0, 60.0), Scalar(8.0, 255.0, 255.0), m2)
+        Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR); Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV)
+        Core.inRange(hsv, Scalar(132.0, 40.0, 55.0), Scalar(180.0, 255.0, 255.0), m1)
+        Core.inRange(hsv, Scalar(0.0, 40.0, 55.0), Scalar(10.0, 255.0, 255.0), m2)
         Core.bitwise_or(m1, m2, mask)
         val k = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(3.0, 3.0))
-        Imgproc.dilate(mask, mask, k)
-        Imgproc.GaussianBlur(mask, blur, Size(5.0, 5.0), 1.5)
-        val minR = (rgba.cols() * 0.009).toInt().coerceAtLeast(10)
-        val maxR = (rgba.cols() * 0.030).toInt().coerceAtLeast(25)
-        Imgproc.HoughCircles(blur, circles, Imgproc.HOUGH_GRADIENT, 1.2, (rgba.cols() * 0.024).coerceAtLeast(26.0), 100.0, 17.0, minR, maxR)
+        Imgproc.dilate(mask, mask, k); Imgproc.GaussianBlur(mask, blur, Size(5.0, 5.0), 1.4)
+        val minR = (rgba.cols() * 0.009).toInt().coerceAtLeast(10); val maxR = (rgba.cols() * 0.030).toInt().coerceAtLeast(25)
+        Imgproc.HoughCircles(blur, circles, Imgproc.HOUGH_GRADIENT, 1.2, (rgba.cols() * 0.024).coerceAtLeast(26.0), 100.0, 13.5, minR, maxR)
         val raw = mutableListOf<Triple<Float, Float, Double>>()
         for (i in 0 until circles.cols()) {
             val c = circles.get(0, i); val cx = c[0]; val cy = c[1]; val r = c[2]
             var ringHits = 0; var innerHits = 0
             for (a in 0 until 24) {
-                val ang = a * Math.PI / 12.0
-                val px = (cx + r * cos(ang)).roundToInt().coerceIn(0, mask.cols() - 1)
-                val py = (cy + r * sin(ang)).roundToInt().coerceIn(0, mask.rows() - 1)
-                val v = mask.get(py, px)
-                if (v != null) if (v[0] > 0.0) ringHits++
+                val ang = a * Math.PI / 12.0; var hit = false
+                for (dr in listOf(-1.5, 0.0, 1.5)) {
+                    val px = (cx + (r + dr) * cos(ang)).roundToInt().coerceIn(0, mask.cols() - 1)
+                    val py = (cy + (r + dr) * sin(ang)).roundToInt().coerceIn(0, mask.rows() - 1)
+                    val v = mask.get(py, px); if (v != null) if (v[0] > 0.0) hit = true
+                }
+                if (hit) ringHits++
             }
             for (a in 0 until 8) {
                 val ang = a * Math.PI / 4.0
-                val px = (cx + r * 0.42 * cos(ang)).roundToInt().coerceIn(0, mask.cols() - 1)
-                val py = (cy + r * 0.42 * sin(ang)).roundToInt().coerceIn(0, mask.rows() - 1)
-                val v = mask.get(py, px)
-                if (v != null) if (v[0] > 0.0) innerHits++
+                val px = (cx + r * 0.4 * cos(ang)).roundToInt().coerceIn(0, mask.cols() - 1)
+                val py = (cy + r * 0.4 * sin(ang)).roundToInt().coerceIn(0, mask.rows() - 1)
+                val v = mask.get(py, px); if (v != null) if (v[0] > 0.0) innerHits++
             }
-            if (ringHits >= 11) if (innerHits <= 3) raw.add(Triple(cx.toFloat(), cy.toFloat(), r))
+            if (ringHits >= 10) if (innerHits <= 4) raw.add(Triple(cx.toFloat(), cy.toFloat(), r))
         }
         bgr.release(); hsv.release(); m1.release(); m2.release(); mask.release(); blur.release(); circles.release(); k.release()
         if (raw.size < 4) return raw.map { PointF(it.first, it.second) }
         val medR = raw.map { it.third }.sorted()[raw.size / 2]
-        return raw.filter { abs(it.third - medR) <= medR * 0.30 }.map { PointF(it.first, it.second) }
+        return raw.filter { abs(it.third - medR) <= medR * 0.25 }.map { PointF(it.first, it.second) }
     }
     private fun drawMarkers(bmp: Bitmap, pts: List<PointF>): Bitmap {
         val out = bmp.copy(Bitmap.Config.ARGB_8888, true); val canvas = Canvas(out)
