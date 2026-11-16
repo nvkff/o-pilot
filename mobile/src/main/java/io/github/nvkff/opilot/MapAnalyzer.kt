@@ -1,30 +1,12 @@
 package io.github.nvkff.opilot
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.PointF
+import android.graphics.*
 import org.opencv.android.Utils
-import org.opencv.core.Core
-import org.opencv.core.Mat
-import org.opencv.core.MatOfPoint
-import org.opencv.core.MatOfPoint2f
-import org.opencv.core.Point
-import org.opencv.core.Scalar
-import org.opencv.core.Size
+import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
-import kotlin.math.abs
-import kotlin.math.atan2
-import kotlin.math.hypot
-import kotlin.math.roundToInt
+import kotlin.math.*
 
-data class AnalysisResult(
-    val alignedBitmap: Bitmap,
-    val previewBitmap: Bitmap,
-    val controlPoints: List<PointF>,
-    val rotationDeg: Float
-)
+data class AnalysisResult(val alignedBitmap: Bitmap, val previewBitmap: Bitmap, val controlPoints: List<PointF>, val rotationDeg: Float)
 
 object MapAnalyzer {
     fun analyze(srcBitmap: Bitmap): AnalysisResult {
@@ -37,18 +19,13 @@ object MapAnalyzer {
         val alignedBmp = Bitmap.createBitmap(alignedMat.cols(), alignedMat.rows(), Bitmap.Config.ARGB_8888)
         Utils.matToBitmap(alignedMat, alignedBmp)
         alignedMat.release()
-        val previewBmp = drawMarkers(alignedBmp, cps)
-        return AnalysisResult(alignedBmp, previewBmp, cps, deg)
+        return AnalysisResult(alignedBmp, drawMarkers(alignedBmp, cps), cps, deg)
     }
-
     private fun detectNorthAngle(rgba: Mat): Float {
-        val gray = Mat()
-        val edges = Mat()
-        val lines = Mat()
+        val gray = Mat(); val edges = Mat(); val lines = Mat()
         Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
         Imgproc.Canny(gray, edges, 50.0, 150.0)
-        val minLen = rgba.rows() * 0.16
-        Imgproc.HoughLinesP(edges, lines, 1.0, Math.PI / 180.0, 100, minLen, 20.0)
+        Imgproc.HoughLinesP(edges, lines, 1.0, Math.PI / 180.0, 100, rgba.rows() * 0.16, 20.0)
         val bins = IntArray(61)
         for (i in 0 until lines.rows()) {
             val l = lines.get(i, 0)
@@ -63,67 +40,47 @@ object MapAnalyzer {
         for (i in bins.indices) if (bins[i] > bins[bestIdx]) bestIdx = i
         return if (bins[bestIdx] >= 3) (bestIdx - 30).toFloat() else 0f
     }
-
     private fun rotateMat(src: Mat, angleDeg: Double): Mat {
         val dst = Mat()
-        val center = Point(src.cols() / 2.0, src.rows() / 2.0)
-        val m = Imgproc.getRotationMatrix2D(center, angleDeg, 1.0)
+        val m = Imgproc.getRotationMatrix2D(Point(src.cols() / 2.0, src.rows() / 2.0), angleDeg, 1.0)
         Imgproc.warpAffine(src, dst, m, Size(src.cols().toDouble(), src.rows().toDouble()), Imgproc.INTER_LINEAR, Core.BORDER_CONSTANT, Scalar(255.0, 255.0, 255.0, 255.0))
-        m.release()
-        return dst
+        m.release(); return dst
     }
-
     private fun detectMagentaCps(rgba: Mat): List<PointF> {
-        val bgr = Mat()
-        val hsv = Mat()
-        val mask = Mat()
+        val bgr = Mat(); val hsv = Mat(); val m1 = Mat(); val m2 = Mat(); val mask = Mat(); val blur = Mat(); val circles = Mat()
         Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR)
         Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV)
-        Core.inRange(hsv, Scalar(130.0, 55.0, 50.0), Scalar(175.0, 255.0, 255.0), mask)
-        val kernel = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(5.0, 5.0))
-        Imgproc.morphologyEx(mask, mask, Imgproc.MORPH_CLOSE, kernel)
-        val contours = ArrayList<MatOfPoint>()
-        val hierarchy = Mat()
-        Imgproc.findContours(mask, contours, hierarchy, Imgproc.RETR_CCOMP, Imgproc.CHAIN_APPROX_SIMPLE)
-        val minSz = rgba.cols() * 0.015
-        val maxSz = rgba.cols() * 0.095
-        val rawPts = mutableListOf<PointF>()
-        for (c in contours) {
-            val r = Imgproc.boundingRect(c)
-            val ratio = r.width.toDouble() / r.height.coerceAtLeast(1)
-            if (r.width >= minSz && r.width <= maxSz && r.height >= minSz && r.height <= maxSz && ratio in 0.65..1.45) {
-                val area = Imgproc.contourArea(c)
-                val c2f = MatOfPoint2f(*c.toArray())
-                val peri = Imgproc.arcLength(c2f, true)
-                c2f.release()
-                if (peri > 0.0 && (4.0 * Math.PI * area / (peri * peri)) >= 0.45) {
-                    rawPts.add(PointF(r.x + r.width / 2f, r.y + r.height / 2f))
-                }
+        Core.inRange(hsv, Scalar(135.0, 45.0, 60.0), Scalar(180.0, 255.0, 255.0), m1)
+        Core.inRange(hsv, Scalar(0.0, 45.0, 60.0), Scalar(8.0, 255.0, 255.0), m2)
+        Core.bitwise_or(m1, m2, mask)
+        val k = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, Size(3.0, 3.0))
+        Imgproc.dilate(mask, mask, k)
+        Imgproc.GaussianBlur(mask, blur, Size(5.0, 5.0), 1.5)
+        val minR = (rgba.cols() * 0.009).toInt().coerceAtLeast(10)
+        val maxR = (rgba.cols() * 0.030).toInt().coerceAtLeast(25)
+        Imgproc.HoughCircles(blur, circles, Imgproc.HOUGH_GRADIENT, 1.2, (rgba.cols() * 0.025).coerceAtLeast(28.0), 100.0, 20.0, minR, maxR)
+        val out = mutableListOf<PointF>()
+        for (i in 0 until circles.cols()) {
+            val c = circles.get(0, i); val cx = c[0]; val cy = c[1]; val r = c[2]
+            var hits = 0
+            for (a in 0 until 24) {
+                val ang = a * Math.PI / 12.0
+                val px = (cx + r * cos(ang)).roundToInt().coerceIn(0, mask.cols() - 1)
+                val py = (cy + r * sin(ang)).roundToInt().coerceIn(0, mask.rows() - 1)
+                val v = mask.get(py, px)
+                if (v != null) if (v[0] > 0.0) hits++
             }
-            c.release()
+            if (hits >= 10) out.add(PointF(cx.toFloat(), cy.toFloat()))
         }
-        bgr.release(); hsv.release(); mask.release(); kernel.release(); hierarchy.release()
-        return deduplicate(rawPts, rgba.cols() * 0.025f)
+        bgr.release(); hsv.release(); m1.release(); m2.release(); mask.release(); blur.release(); circles.release(); k.release()
+        return out
     }
-
-    private fun deduplicate(pts: List<PointF>, minDist: Float): List<PointF> {
-        val res = mutableListOf<PointF>()
-        for (p in pts) {
-            if (res.none { hypot((it.x - p.x).toDouble(), (it.y - p.y).toDouble()) < minDist }) res.add(p)
-        }
-        return res
-    }
-
     private fun drawMarkers(bmp: Bitmap, pts: List<PointF>): Bitmap {
-        val out = bmp.copy(Bitmap.Config.ARGB_8888, true)
-        val canvas = Canvas(out)
-        val pCircle = Paint().apply { color = Color.GREEN; style = Paint.Style.STROKE; strokeWidth = (bmp.width * 0.005f).coerceAtLeast(4f); isAntiAlias = true }
-        val pText = Paint().apply { color = Color.GREEN; textSize = (bmp.width * 0.025f).coerceAtLeast(28f); isFakeBoldText = true; isAntiAlias = true }
-        val rad = (bmp.width * 0.022f).coerceAtLeast(18f)
-        pts.forEachIndexed { i, pt ->
-            canvas.drawCircle(pt.x, pt.y, rad, pCircle)
-            canvas.drawText("${i + 1}", pt.x + rad + 4f, pt.y + 8f, pText)
-        }
+        val out = bmp.copy(Bitmap.Config.ARGB_8888, true); val canvas = Canvas(out)
+        val pc = Paint().apply { color = Color.GREEN; style = Paint.Style.STROKE; strokeWidth = (bmp.width * 0.005f).coerceAtLeast(4f); isAntiAlias = true }
+        val ptPaint = Paint().apply { color = Color.GREEN; textSize = (bmp.width * 0.024f).coerceAtLeast(28f); isFakeBoldText = true; isAntiAlias = true }
+        val rad = (bmp.width * 0.020f).coerceAtLeast(18f)
+        pts.forEachIndexed { i, p -> canvas.drawCircle(p.x, p.y, rad, pc); canvas.drawText("${i + 1}", p.x + rad + 4f, p.y + 8f, ptPaint) }
         return out
     }
 }
