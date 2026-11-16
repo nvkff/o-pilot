@@ -45,7 +45,6 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
     fun startTwoPt() { twoPtStep = 0; sPt1 = null; mGeo1 = null; sPt2 = null; mode = Mode.TWO_PT; onStatus?.invoke("2Т (1/4): тапни ориентир НА СКАНЕ"); invalidate() }
     fun setOverlayAlpha(a: Int) { imgPaint.alpha = a; invalidate() }
     fun setPlacement(c: GeoPoint, wMeters: Double) { centerGeo = c; widthMeters = wMeters; rotationDeg = 0f; invalidate() }
-
     private fun rebuildMatrix() {
         val b = bmp ?: return; val proj = mapViewRef?.projection ?: return
         val dLon = widthMeters / (111320.0 * cos(Math.toRadians(centerGeo.latitude)).coerceAtLeast(0.2))
@@ -62,102 +61,7 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
         return cps.mapIndexed { idx, p ->
             val pt = floatArrayOf(p.x, p.y); matrix.mapPoints(pt)
             val g = proj.fromPixels(pt[0].toInt(), pt[1].toInt())
-            val lbl = labels.getOrNull(idx) ?: "КП ${idx + 1}"
-            ControlPoint(idx + 1, lbl, g.latitude, g.longitude)
-        }
-    }
-    override fun onDraw(c: Canvas) {
-        val b = bmp ?: return; rebuildMatrix(); c.drawBitmap(b, matrix, imgPaint)
-        cps.forEachIndexed { i, p ->
-            val pt = floatArrayOf(p.x, p.y); matrix.mapPoints(pt)
-            c.drawCircle(pt[0], pt[1], 18f, cpPaint); c.drawText(labels.getOrNull(i) ?: "${i + 1}", pt[0] + 20f, pt[1] + 8f, cpText)
-        }
-        sPt1?.let { val p = floatArrayOf(it.x, it.y); matrix.mapPoints(p); c.drawCircle(p[0], p[1], 14f, pinPaint) }
-        sPt2?.let { val p = floatArrayOf(it.x, it.y); matrix.mapPoints(p); c.drawCircle(p[0], p[1], 14f, pinPaint) }
-    }
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (mode == Mode.MAP) return false
-        if (mode == Mode.EDIT_CP) { tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e); return true }
-        if (mode == Mode.TWO_PT) { tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e); return true }
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { lx = e.x; ly = e.y; multi = false }
-            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2) { multi = true; lastDist = dist(e); lastAng = ang(e) }
-            MotionEvent.ACTION_MOVE -> {
-                if (e.pointerCount == 1) if (!multi) {
-                    mapViewRef?.projection?.let {
-                        val pc = it.toPixels(centerGeo, null)
-                        val ng = it.fromPixels((pc.x + (e.x - lx)).toInt(), (pc.y + (e.y - ly)).toInt())
-                        centerGeo = GeoPoint(ng.latitude, ng.longitude)
-                    }
-                    lx = e.x; ly = e.y
-                }
-                if (e.pointerCount == 2) {
-                    val d = dist(e); val a = ang(e)
-                    if (lastDist > 10f) widthMeters = (widthMeters * (d / lastDist)).coerceIn(100.0, 25000.0)
-                    rotationDeg += (a - lastAng); lastDist = d; lastAng = a
-                }
-                invalidate()
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> if (e.pointerCount <= 1) multi = false
-        }
-        return true
-    }
-    private fun handleTwoPtTap(sx: Float, sy: Float) {
-        val proj = mapViewRef?.projection ?: return; val b = bmp ?: return; rebuildMatrix()
-        if (twoPtStep == 0) {
-            val inv = Matrix(); if (!matrix.invert(inv)) return; val pt = floatArrayOf(sx, sy); inv.mapPoints(pt)
-            sPt1 = PointF(pt[0], pt[1]); twoPtStep = 1; onStatus?.invoke("2Т (2/4): теперь ту же точку НА КАРТЕ")
-        } else if (twoPtStep == 1) {
-            val g = proj.fromPixels(sx.toInt(), sy.toInt()); mGeo1 = GeoPoint(g.latitude, g.longitude); twoPtStep = 2; onStatus?.invoke("2Т (3/4): 2-й ориентир НА СКАНЕ")
-        } else if (twoPtStep == 2) {
-            val inv = Matrix(); if (!matrix.invert(inv)) return; val pt = floatArrayOf(sx, sy); inv.mapPoints(pt)
-            sPt2 = PointF(pt[0], pt[1]); twoPtStep = 3; onStatus?.invoke("2Т (4/4): 2-й ориентир НА КАРТЕ")
-        } else if (twoPtStep == 3) {
-            val b1 = sPt1 ?: return; val b2 = sPt2 ?: return; val g1 = mGeo1 ?: return
-            val g2 = proj.fromPixels(sx.toInt(), sy.toInt()); val p1 = proj.toPixels(g1, null); val p2 = proj.toPixels(GeoPoint(g2.latitude, g2.longitude), null)
-            val dbx = (b2.x - b1.x).toDouble(); val dby = (b2.y - b1.y).toDouble()
-            val dsx = (p2.x - p1.x).toDouble(); val dsy = (p2.y - p1.y).toDouble()
-            val lenB = hypot(dbx, dby); val lenS = hypot(dsx, dsy); if (lenB < 10.0) return
-            val sc = lenS / lenB; val dAng = atan2(dsy, dsx) - atan2(dby, dbx); val pxW = b.width * sc
-            val gL = proj.fromPixels((p1.x - pxW / 2).toInt(), p1.y); val gR = proj.fromPixels((p1.x + pxW / 2).toInt(), p1.y)
-            widthMeters = gL.distanceToAsDouble(gR).coerceIn(100.0, 25000.0)
-            rotationDeg = Math.toDegrees(dAng).toFloat()
-            val vx = b.width / 2.0 - b1.x; val vy = b.height / 2.0 - b1.y
-            val scx = p1.x + sc * (vx * cos(dAng) - vy * sin(dAng)); val scy = p1.y + sc * (vx * sin(dAng) + vy * cos(dAng))
-            val cg = proj.fromPixels(scx.toInt(), scy.toInt()); centerGeo = GeoPoint(cg.latitude, cg.longitude)
-            sPt1 = null; sPt2 = null; mode = Mode.MAP; onStatus?.invoke("Привязка по 2 точкам готова!")
-        }
-        invalidate()
-    }
-    private fun handleCpTap(sx: Float, sy: Float) {
-        rebuildMatrix(); val inv = Matrix(); if (!matrix.invert(inv)) return
-        val bPt = floatArrayOf(sx, sy); inv.mapPoints(bPt)
-        val hit = cps.indexOfFirst { val p = floatArrayOf(it.x, it.y); matrix.mapPoints(p); hypot((p[0] - sx).toDouble(), (p[1] - sy).toDouble()) < 45.0 }
-        if (hit >= 0) cps.removeAt(hit) else cps.add(PointF(bPt[0], bPt[1]))
-        invalidate()
-    }
-    private fun dist(e: MotionEvent) = hypot((e.getX(1) - e.getX(0)).toDouble(), (e.getY(1) - e.getY(0)).toDouble()).toFloat()
-    private fun ang(e: MotionEvent) = Math.toDegrees(atan2((e.getY(1) - e.getY(0)).toDouble(), (e.getX(1) - e.getX(0)).toDouble())).toFloat()
-}
-
-    private fun rebuildMatrix() {
-        val b = bmp ?: return; val proj = mapViewRef?.projection ?: return
-        val dLon = widthMeters / (111320.0 * cos(Math.toRadians(centerGeo.latitude)).coerceAtLeast(0.2))
-        val pL = proj.toPixels(GeoPoint(centerGeo.latitude, centerGeo.longitude - dLon / 2.0), null)
-        val pR = proj.toPixels(GeoPoint(centerGeo.latitude, centerGeo.longitude + dLon / 2.0), null)
-        val pC = proj.toPixels(centerGeo, null)
-        val pxW = hypot((pR.x - pL.x).toDouble(), (pR.y - pL.y).toDouble()).toFloat().coerceAtLeast(10f)
-        val s = pxW / b.width
-        matrix.reset(); matrix.postTranslate(-b.width / 2f, -b.height / 2f); matrix.postScale(s, s)
-        matrix.postRotate(rotationDeg); matrix.postTranslate(pC.x.toFloat(), pC.y.toFloat())
-    }
-    fun exportControlPoints(proj: org.osmdroid.views.Projection): List<ControlPoint> {
-        rebuildMatrix()
-        return cps.mapIndexed { idx, p ->
-            val pt = floatArrayOf(p.x, p.y); matrix.mapPoints(pt)
-            val g = proj.fromPixels(pt[0].toInt(), pt[1].toInt())
-            val lbl = labels.getOrNull(idx) ?: "КП ${idx + 1}"
-            ControlPoint(idx + 1, lbl, g.latitude, g.longitude)
+            ControlPoint(idx + 1, labels.getOrNull(idx) ?: "КП ${idx + 1}", g.latitude, g.longitude)
         }
     }
     override fun onDraw(c: Canvas) {
@@ -205,7 +109,8 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
             val lenB = hypot(dbx, dby); val lenS = hypot(dsx, dsy); if (lenB < 10.0) return
             val sc = lenS / lenB; val dAng = atan2(dsy, dsx) - atan2(dby, dbx); val pxW = b.width * sc
             val gL = proj.fromPixels((p1.x - pxW / 2).toInt(), p1.y); val gR = proj.fromPixels((p1.x + pxW / 2).toInt(), p1.y)
-            widthMeters = gL.distanceToAsDouble(gR).coerceIn(100.0, 25000.0); rotationDeg = Math.toDegrees(dAng).toFloat()
+            widthMeters = GeoPoint(gL.latitude, gL.longitude).distanceToAsDouble(GeoPoint(gR.latitude, gR.longitude)).coerceIn(100.0, 25000.0)
+            rotationDeg = Math.toDegrees(dAng).toFloat()
             val vx = b.width / 2.0 - b1.x; val vy = b.height / 2.0 - b1.y
             val scx = p1.x + sc * (vx * cos(dAng) - vy * sin(dAng)); val scy = p1.y + sc * (vx * sin(dAng) + vy * cos(dAng))
             val cg = proj.fromPixels(scx.toInt(), scy.toInt()); centerGeo = GeoPoint(cg.latitude, cg.longitude)
