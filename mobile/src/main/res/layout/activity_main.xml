@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="#121417">
+    <TextView
+        android:id="@+id/tvTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="O-Pilot"
+        android:textColor="#FFFFFF"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Init..."
+        android:textColor="#9AA4B2"
+        android:textSize="14sp"
+        android:layout_marginBottom="28dp" />
+    <Button
+        android:id="@+id/btnScanCamera"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:text="Сканировать карту (камера)"
+        android:layout_marginBottom="12dp" />
+    <Button
+        android:id="@+id/btnPickGallery"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:text="Загрузить фото из галереи"
+        android:layout_marginBottom="12dp" />
+    <Button
+        android:id="@+id/btnImportPdf"
+        android:layout_width="match_parent"
+        android:layout_height="54dp"
+        android:text="Импорт карты из PDF" />
+</LinearLayout>
