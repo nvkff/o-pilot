@@ -42,7 +42,7 @@ object MapAnalyzer {
     }
     private fun rotateMat(src: Mat, angleDeg: Double): Mat {
         val dst = Mat()
-        val m = Imgproc.getRotationMatrix2D(Point(src.cols() / 2.0, src.rows() / 2.0), angleDeg, 1.0)
+        val m = Imgproc.getRotationMatrix2D(org.opencv.core.Point(src.cols() / 2.0, src.rows() / 2.0), angleDeg, 1.0)
         Imgproc.warpAffine(src, dst, m, Size(src.cols().toDouble(), src.rows().toDouble()), Imgproc.INTER_LINEAR, Core.BORDER_CONSTANT, Scalar(255.0, 255.0, 255.0, 255.0))
         m.release(); return dst
     }
