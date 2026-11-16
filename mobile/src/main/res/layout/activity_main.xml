@@ -3,8 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp"
+    android:padding="20dp"
     android:background="#121417">
     <TextView
         android:id="@+id/tvTitle"
@@ -12,32 +11,46 @@
         android:layout_height="wrap_content"
         android:text="O-Pilot"
         android:textColor="#FFFFFF"
-        android:textSize="28sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
+        android:textSize="26sp"
+        android:textStyle="bold" />
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Init..."
         android:textColor="#9AA4B2"
-        android:textSize="14sp"
-        android:layout_marginBottom="28dp" />
+        android:textSize="13sp"
+        android:layout_marginBottom="12dp" />
+    <ImageView
+        android:id="@+id/ivPreview"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:scaleType="fitCenter"
+        android:background="#1C2026"
+        android:layout_marginBottom="12dp" />
+    <Button
+        android:id="@+id/btnAnalyze"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:text="Далее: поиск КП и севера (OpenCV)"
+        android:visibility="gone"
+        android:layout_marginBottom="10dp" />
     <Button
         android:id="@+id/btnScanCamera"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="48dp"
         android:text="Сканировать карту (камера)"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="8dp" />
     <Button
         android:id="@+id/btnPickGallery"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="48dp"
         android:text="Загрузить фото из галереи"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="8dp" />
     <Button
         android:id="@+id/btnImportPdf"
         android:layout_width="match_parent"
-        android:layout_height="54dp"
+        android:layout_height="48dp"
         android:text="Импорт карты из PDF" />
 </LinearLayout>
