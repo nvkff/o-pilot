@@ -44,39 +44,6 @@ object LocalMapMatcher {
         for (wM in widths) {
             val tw = ((wM * 0.72) / snap.mPerPx).toInt(); val th = (tw * ch.toDouble() / cw).toInt()
             if (minOf(tw, th) < 30) continue
-            if (tw >= osmFeat.cols() || th >= osmFeat.rows()) continue
-            val baseTpl = Mat(); Imgproc.resize(scanFeat, baseTpl, Size(tw.toDouble(), th.toDouble()))
-            val center = org.opencv.core.Point(tw / 2.0, th / 2.0)
-            for (ang in angles) {
-                val m = Imgproc.getRotationMatrix2D(center, -ang.toDouble(), 1.0)
-                val rotTpl = Mat(); Imgproc.warpAffine(baseTpl, rotTpl, m, Size(tw.toDouble(), th.toDouble()))
-                val res = Mat(); Imgproc.matchTemplate(osmFeat, rotTpl, res, Imgproc.TM_CCOEFF_NORMED)
-                val mm = Core.minMaxLoc(res)
-                if (mm.maxVal > (best?.score ?: -999.0)) {
-                    val mx = mm.maxLoc.x + tw / 2.0; val my = mm.maxLoc.y + th / 2.0
-                    val lat = snap.tlLat + (my / snap.bmp.height) * (snap.brLat - snap.tlLat)
-                    val lon = snap.tlLon + (mx / snap.bmp.width) * (snap.brLon - snap.tlLon)
-                    best = LocalPlacement(lat, lon, wM, ang, mm.maxVal)
-                }
-                m.release(); rotTpl.release(); res.release()
-            }
-            baseTpl.release()
-        }
-        osmFeat.release(); scanFeat.release(); return best
-    }
-}
-    fun align(snap: MapSnap, scanBmp: Bitmap, scaleDenom: Int = 0): LocalPlacement? {
-        val osmFeat = extractWaterAndRoads(snap.bmp, false)
-        val cx0 = (scanBmp.width * 0.14).toInt(); val cy0 = (scanBmp.height * 0.10).toInt()
-        val cw = (scanBmp.width * 0.72).toInt(); val ch = (scanBmp.height * 0.80).toInt()
-        val crop = Bitmap.createBitmap(scanBmp, cx0, cy0, cw, ch)
-        val scanFeat = extractWaterAndRoads(crop, true); crop.recycle()
-        val widths = if (scaleDenom > 0) listOf(0.22, 0.26, 0.30, 0.34).map { it * scaleDenom } else listOf(1200.0, 1600.0, 2000.0, 2400.0)
-        val angles = listOf(-15f, -12f, -9f, -6f, -3f, 0f, 3f, 6f, 9f, 12f, 15f)
-        var best: LocalPlacement? = null
-        for (wM in widths) {
-            val tw = ((wM * 0.72) / snap.mPerPx).toInt(); val th = (tw * ch.toDouble() / cw).toInt()
-            if (minOf(tw, th) < 30) continue
             if (tw >= osmFeat.cols()) continue
             if (th >= osmFeat.rows()) continue
             val baseTpl = Mat(); Imgproc.resize(scanFeat, baseTpl, Size(tw.toDouble(), th.toDouble()))
