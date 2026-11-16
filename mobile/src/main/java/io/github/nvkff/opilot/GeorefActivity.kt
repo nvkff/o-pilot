@@ -83,17 +83,18 @@ class GeorefActivity : AppCompatActivity() {
         mapView.controller.setCenter(target); return target
     }
     private fun runAutoAlign() {
-        val bmp = scanBmp ?: return; val c = mapView.mapCenter; tvInfo.text = "Загрузка OSM (Overpass API)..."
+        val bmp = scanBmp ?: return
+        if (isSat) { tvInfo.text = "Переключи на схему OSM для Авто"; return }
+        val snap = LocalMapMatcher.captureMap(mapView) ?: return
+        tvInfo.text = "Совмещение с картой..."
         CoroutineScope(Dispatchers.Main).launch {
-            var err: String? = null
-            val res = withContext(Dispatchers.IO) {
-                try { OverpassGeoref.autoAlign(bmp, c.latitude, c.longitude, OverpassGeoref.fetchWays(c.latitude, c.longitude), scaleDenom) }
-                catch (e: Exception) { err = e.message; null }
-            }
+            val res = withContext(Dispatchers.Default) { LocalMapMatcher.align(snap, bmp, scaleDenom) }
+            snap.bmp.recycle()
             if (res != null) {
-                val gp = GeoPoint(res.centerLat, res.centerLon); overlayView.setPlacement(gp, res.widthMeters); mapView.controller.animateTo(gp)
-                tvInfo.text = String.format(Locale.US, "Авто-привязка: %.2f", res.score)
-            } else tvInfo.text = "Ошибка OSM: ${err ?: "нет совпадения"}"
+                val gp = GeoPoint(res.centerLat, res.centerLon)
+                overlayView.setPlacement(gp, res.widthMeters)
+                tvInfo.text = String.format(Locale.US, "Авто: %.2f (подправь 2п)", res.score)
+            } else tvInfo.text = "Не совпало — отдали карту и жми Авто"
         }
     }
     private fun finishGeoref() {
