@@ -6,7 +6,7 @@ import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
 import kotlin.math.*
 
-data class AnalysisResult(val alignedBitmap: Bitmap, val previewBitmap: Bitmap, val controlPoints: List<PointF>, val rotationDeg: Float)
+data class AnalysisResult(val alignedBitmap: Bitmap, val previewBitmap: Bitmap, val controlPoints: List<PointF>, val rotationDeg: Float, val finishPoint: PointF? = null)
 
 object MapAnalyzer {
     fun analyze(srcBitmap: Bitmap): AnalysisResult {
@@ -14,10 +14,10 @@ object MapAnalyzer {
         val deg = detectNorthAngle(rgba)
         val alignedMat = if (abs(deg) >= 1f) rotateMat(rgba, -deg.toDouble()) else rgba.clone()
         rgba.release()
-        val cps = detectMagentaCps(alignedMat)
+        val (cps, fin) = detectMagentaCps(alignedMat)
         val alignedBmp = Bitmap.createBitmap(alignedMat.cols(), alignedMat.rows(), Bitmap.Config.ARGB_8888)
         Utils.matToBitmap(alignedMat, alignedBmp); alignedMat.release()
-        return AnalysisResult(alignedBmp, drawMarkers(alignedBmp, cps), cps, deg)
+        return AnalysisResult(alignedBmp, drawMarkers(alignedBmp, cps, emptyList(), fin), cps, deg, fin)
     }
     private fun detectNorthAngle(rgba: Mat): Float {
         val gray = Mat(); val edges = Mat(); val lines = Mat()
@@ -43,7 +43,7 @@ object MapAnalyzer {
         Imgproc.warpAffine(src, dst, m, Size(src.cols().toDouble(), src.rows().toDouble()), Imgproc.INTER_LINEAR, Core.BORDER_CONSTANT, Scalar(255.0, 255.0, 255.0, 255.0))
         m.release(); return dst
     }
-    private fun detectMagentaCps(rgba: Mat): List<PointF> {
+    private fun detectMagentaCps(rgba: Mat): Pair<List<PointF>, PointF?> {
         val bgr = Mat(); val hsv = Mat(); val m1 = Mat(); val m2 = Mat(); val mask = Mat(); val blur = Mat(); val circles = Mat()
         Imgproc.cvtColor(rgba, bgr, Imgproc.COLOR_RGBA2BGR); Imgproc.cvtColor(bgr, hsv, Imgproc.COLOR_BGR2HSV)
         Core.inRange(hsv, Scalar(132.0, 42.0, 55.0), Scalar(180.0, 255.0, 255.0), m1)
@@ -75,21 +75,40 @@ object MapAnalyzer {
             if (ringHits >= 11) if (innerHits <= 4) raw.add(Triple(cx.toFloat(), cy.toFloat(), r))
         }
         bgr.release(); hsv.release(); m1.release(); m2.release(); mask.release(); blur.release(); circles.release(); k.release()
-        if (raw.size < 4) return raw.map { PointF(it.first, it.second) }
+        if (raw.size < 4) return raw.map { PointF(it.first, it.second) } to null
         val medR = raw.map { it.third }.sorted()[raw.size / 2]
         val res = mutableListOf<PointF>()
         for (item in raw) if (abs(item.third - medR) <= medR * 0.25) {
             val p = PointF(item.first, item.second)
             if (res.none { hypot((it.x - p.x).toDouble(), (it.y - p.y).toDouble()) < medR * 1.8 }) res.add(p)
         }
-        return res
+        var fin: PointF? = null; var bestF = 0
+        val b2 = Mat(); val h2 = Mat(); val m1b = Mat(); val m2b = Mat(); val mb = Mat()
+        Imgproc.cvtColor(rgba, b2, Imgproc.COLOR_RGBA2BGR); Imgproc.cvtColor(b2, h2, Imgproc.COLOR_BGR2HSV)
+        Core.inRange(h2, Scalar(132.0, 42.0, 55.0), Scalar(180.0, 255.0, 255.0), m1b); Core.inRange(h2, Scalar(0.0, 42.0, 55.0), Scalar(9.0, 255.0, 255.0), m2b); Core.bitwise_or(m1b, m2b, mb)
+        for (p in res) {
+            var ih = 0
+            for (a in 0 until 16) {
+                val ang = a * Math.PI / 8.0; var hit = false
+                for (dr in listOf(-1.5, 0.0, 1.5)) {
+                    val px = (p.x + (medR * 0.68 + dr) * cos(ang)).roundToInt().coerceIn(0, mb.cols() - 1)
+                    val py = (p.y + (medR * 0.68 + dr) * sin(ang)).roundToInt().coerceIn(0, mb.rows() - 1)
+                    val v = mb.get(py, px); if (v != null) if (v[0] > 0.0) hit = true
+                }
+                if (hit) ih++
+            }
+            if (ih >= 9) if (ih > bestF) { bestF = ih; fin = p }
+        }
+        b2.release(); h2.release(); m1b.release(); m2b.release(); mb.release()
+        return res.filter { it !== fin } to fin
     }
-    fun drawMarkers(bmp: Bitmap, pts: List<PointF>, labels: List<String> = emptyList()): Bitmap {
+    fun drawMarkers(bmp: Bitmap, pts: List<PointF>, labels: List<String> = emptyList(), fin: PointF? = null): Bitmap {
         val out = bmp.copy(Bitmap.Config.ARGB_8888, true); val canvas = Canvas(out)
         val pc = Paint().apply { color = Color.GREEN; style = Paint.Style.STROKE; strokeWidth = (bmp.width * 0.005f).coerceAtLeast(4f); isAntiAlias = true }
         val ptPaint = Paint().apply { color = Color.GREEN; textSize = (bmp.width * 0.024f).coerceAtLeast(28f); isFakeBoldText = true; isAntiAlias = true }
         val rad = (bmp.width * 0.020f).coerceAtLeast(18f)
         pts.forEachIndexed { i, p -> canvas.drawCircle(p.x, p.y, rad, pc); canvas.drawText(labels.getOrNull(i) ?: "${i + 1}", p.x + rad + 4f, p.y + 8f, ptPaint) }
+        fin?.let { canvas.drawCircle(it.x, it.y, rad, pc); canvas.drawText("Ф", it.x + rad + 4f, it.y + 8f, ptPaint) }
         return out
     }
 }

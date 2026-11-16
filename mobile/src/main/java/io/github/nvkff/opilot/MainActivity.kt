@@ -71,7 +71,7 @@ class MainActivity : AppCompatActivity() {
                 CourseOrderer.orderAndExtract(res.alignedBitmap, res.controlPoints) { course ->
                     CoroutineScope(Dispatchers.Main).launch {
                         currentBitmap = res.alignedBitmap; detectedCps = course.points; detectedLabels = course.labels; detectedScale = course.scale; isAnalyzed = true
-                        val marked = withContext(Dispatchers.Default) { MapAnalyzer.drawMarkers(res.alignedBitmap, course.points, course.labels) }
+                        val marked = withContext(Dispatchers.Default) { MapAnalyzer.drawMarkers(res.alignedBitmap, course.points, course.labels, res.finishPoint) }
                         ivPreview.setImageBitmap(marked); btnAnalyze.text = "Далее: привязка к карте"
                         val scTxt = if (course.scale > 0) "1:${course.scale}" else "нет"
                         tvStatus.text = "КП: ${course.points.size} · Легенда: ${course.legendCount} · Масштаб: $scTxt"

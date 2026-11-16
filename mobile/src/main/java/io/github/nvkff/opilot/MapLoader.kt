@@ -11,7 +11,7 @@ import java.io.File
 import java.io.FileOutputStream
 
 object MapLoader {
-    fun loadBitmapFromUri(context: Context, uri: Uri, maxDim: Int = 4096): Bitmap {
+    fun loadBitmapFromUri(context: Context, uri: Uri, maxDim: Int = 5000): Bitmap {
         val source = ImageDecoder.createSource(context.contentResolver, uri)
         return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
             val w = info.size.width
@@ -25,7 +25,7 @@ object MapLoader {
         }
     }
 
-    fun loadPdfFirstPage(context: Context, uri: Uri, maxDim: Int = 4096): Bitmap? {
+    fun loadPdfFirstPage(context: Context, uri: Uri, maxDim: Int = 5000): Bitmap? {
         val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: return null
         return pfd.use { fd ->
             PdfRenderer(fd).use { renderer ->

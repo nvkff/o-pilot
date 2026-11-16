@@ -37,7 +37,7 @@ class GeorefActivity : AppCompatActivity() {
         Configuration.getInstance().userAgentValue = packageName
         setContentView(R.layout.activity_georef)
         mapView = findViewById(R.id.mapView); overlayView = findViewById(R.id.overlayView); tvInfo = findViewById(R.id.tvGeorefInfo)
-        overlayView.mapViewRef = mapView; mapView.setTileSource(TileSourceFactory.MAPNIK); mapView.setMultiTouchControls(true)
+        overlayView.mapViewRef = mapView; findViewById<android.view.View>(R.id.topBar).post { overlayView.loupeTopY = findViewById<android.view.View>(R.id.topBar).bottom + 20f }; mapView.setTileSource(TileSourceFactory.MAPNIK); mapView.setMultiTouchControls(true)
         mapView.addMapListener(object : MapListener {
             override fun onScroll(e: ScrollEvent?): Boolean { overlayView.invalidate(); return false }
             override fun onZoom(e: ZoomEvent?): Boolean { overlayView.invalidate(); return false }
@@ -92,7 +92,7 @@ class GeorefActivity : AppCompatActivity() {
             snap.bmp.recycle()
             if (res != null) {
                 val gp = GeoPoint(res.centerLat, res.centerLon)
-                overlayView.setPlacement(gp, res.widthMeters)
+                overlayView.setPlacement(gp, res.widthMeters, res.rotDeg)
                 tvInfo.text = String.format(Locale.US, "Авто: %.2f (подправь 2п)", res.score)
             } else tvInfo.text = "Не совпало — отдали карту и жми Авто"
         }
