@@ -143,3 +143,34 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
     private fun dist(e: MotionEvent) = hypot((e.getX(1) - e.getX(0)).toDouble(), (e.getY(1) - e.getY(0)).toDouble()).toFloat()
     private fun ang(e: MotionEvent) = Math.toDegrees(atan2((e.getY(1) - e.getY(0)).toDouble(), (e.getX(1) - e.getX(0)).toDouble())).toFloat()
 }
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (mode == Mode.MAP) return false
+        if (mode in listOf(Mode.EDIT_CP, Mode.TWO_PT)) {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; loupeX = e.x; loupeY = e.y; loupeActive = false; postDelayed(loupeRun, 180L); tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
+                MotionEvent.ACTION_POINTER_DOWN -> { removeCallbacks(loupeRun); loupeActive = false; invalidate(); mapViewRef?.dispatchTouchEvent(e) }
+                MotionEvent.ACTION_MOVE -> if (loupeActive) { loupeX = e.x; loupeY = e.y; invalidate() } else { if (hypot((e.x - downX).toDouble(), (e.y - downY).toDouble()) > 18.0) removeCallbacks(loupeRun); tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    removeCallbacks(loupeRun)
+                    if (loupeActive) {
+                        loupeActive = false; val cEv = MotionEvent.obtain(e); cEv.action = MotionEvent.ACTION_CANCEL; mapViewRef?.dispatchTouchEvent(cEv); cEv.recycle()
+                        if (e.actionMasked == MotionEvent.ACTION_UP) { if (mode == Mode.EDIT_CP) handleCpTap(e.x, e.y) else handleTwoPtTap(e.x, e.y) }
+                        invalidate()
+                    } else { tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
+                }
+                else -> mapViewRef?.dispatchTouchEvent(e)
+            }
+            return true
+        }
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> { lx = e.x; ly = e.y; multi = false }
+            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2) { multi = true; lastDist = dist(e); lastAng = ang(e) }
+            MotionEvent.ACTION_MOVE -> {
+                if (e.pointerCount == 1) if (!multi) { mapViewRef?.projection?.let { val pc = it.toPixels(centerGeo, null); val ng = it.fromPixels((pc.x + (e.x - lx)).toInt(), (pc.y + (e.y - ly)).toInt()); centerGeo = GeoPoint(ng.latitude, ng.longitude) }; lx = e.x; ly = e.y }
+                if (e.pointerCount == 2) { val d = dist(e); val a = ang(e); if (lastDist > 10f) widthMeters = (widthMeters * (d / lastDist)).coerceIn(100.0, 25000.0); rotationDeg += (a - lastAng); lastDist = d; lastAng = a }
+                invalidate()
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> if (e.pointerCount <= 1) multi = false
+        }
+        return true
+    }

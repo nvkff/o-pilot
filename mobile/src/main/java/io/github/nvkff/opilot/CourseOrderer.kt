@@ -76,7 +76,7 @@ object CourseOrderer {
         val big = Bitmap.createScaledBitmap(crop, cw * 3, src.height * 3, true); crop.recycle()
         val rgba = Mat(); val gray = Mat(); val out = Mat()
         Utils.bitmapToMat(big, rgba); Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
-        if (Core.mean(gray).val[0] < 125.0) Core.bitwise_not(gray, gray)
+        val tmp=Mat();Imgproc.threshold(gray,tmp,127.0,255.0,Imgproc.THRESH_BINARY);val br=Core.countNonZero(tmp).toDouble()/(gray.rows()*gray.cols()).coerceAtLeast(1);tmp.release();if(br<0.5)Core.bitwise_not(gray,gray)
         Core.normalize(gray, gray, 0.0, 255.0, Core.NORM_MINMAX)
         Imgproc.cvtColor(gray, out, Imgproc.COLOR_GRAY2RGBA)
         val res = Bitmap.createBitmap(out.cols(), out.rows(), Bitmap.Config.ARGB_8888); Utils.matToBitmap(out, res)
