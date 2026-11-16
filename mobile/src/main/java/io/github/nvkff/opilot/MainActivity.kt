@@ -86,7 +86,7 @@ class MainActivity : AppCompatActivity() {
                 ivPreview.setImageBitmap(MapAnalyzer.drawMarkers(res.alignedBitmap, pts, lbls, fin))
                 btnAnalyze.text = "Далее: привязка к карте"
                 val scT = if (sc > 0) "1:$sc" else "нет"
-                if (gErr != null) AlertDialog.Builder(this).setTitle("Ошибка Gemini AI").setMessage(gErr).setPositiveButton("Ок", null).show() else if (key.isEmpty()) Toast.makeText(this, "Ключ Gemini не задан (кнопка справа сверху)", Toast.LENGTH_LONG).show(); tvStatus.text = "КП: ${pts.size} · Легенда: $legCnt · Масштаб: $scT"
+                if (gErr != null) AlertDialog.Builder(this@MainActivity).setTitle("Ошибка Gemini AI").setMessage(gErr).setPositiveButton("Ок", null).show() else if (key.isEmpty()) Toast.makeText(this@MainActivity, "Ключ Gemini не задан (кнопка справа сверху)", Toast.LENGTH_LONG).show(); tvStatus.text = "КП: ${pts.size} · Легенда: $legCnt · Масштаб: $scT"
             }
         }
     }
