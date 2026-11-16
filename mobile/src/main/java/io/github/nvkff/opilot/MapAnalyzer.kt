@@ -72,7 +72,7 @@ object MapAnalyzer {
                 val py = (cy + r * 0.4 * sin(ang)).roundToInt().coerceIn(0, mask.rows() - 1)
                 val v = mask.get(py, px); if (v != null) if (v[0] > 0.0) innerHits++
             }
-            if (ringHits >= 11) if (innerHits <= 4) raw.add(Triple(cx.toFloat(), cy.toFloat(), r))
+            if (ringHits >= 10) if (innerHits <= 5) raw.add(Triple(cx.toFloat(), cy.toFloat(), r))
         }
         bgr.release(); hsv.release(); m1.release(); m2.release(); mask.release(); blur.release(); circles.release(); k.release()
         if (raw.size < 4) return raw.map { PointF(it.first, it.second) } to null

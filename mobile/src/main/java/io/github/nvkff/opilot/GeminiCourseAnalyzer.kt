@@ -32,24 +32,35 @@ object GeminiCourseAnalyzer {
         val baos = ByteArrayOutputStream(); bmp.compress(Bitmap.CompressFormat.JPEG, 88, baos); bmp.recycle()
         return baos.toByteArray()
     }
+    private fun pickModel(apiKey: String): Pair<String?, String?> {
+        return try {
+            val u = URL("https://generativelanguage.googleapis.com/v1beta/models")
+            val c = (u.openConnection() as HttpURLConnection).apply { requestMethod = "GET"; connectTimeout = 10000; readTimeout = 15000; setRequestProperty("x-goog-api-key", apiKey.trim()) }
+            if (c.responseCode != 200) return null to "Models HTTP ${c.responseCode}: ${c.errorStream?.bufferedReader()?.readText()?.take(160)}"
+            val arr = JSONObject(c.inputStream.bufferedReader().readText()).optJSONArray("models") ?: return null to "Empty models"
+            val cands = mutableListOf<String>()
+            for (i in 0 until arr.length()) {
+                val m = arr.getJSONObject(i); val name = m.optString("name").removePrefix("models/")
+                val meth = m.optJSONArray("supportedGenerationMethods")?.toString() ?: ""
+                if (meth.contains("generateContent") && name.contains("flash") && !name.contains("tts") && !name.contains("image") && !name.contains("audio")) cands.add(name)
+            }
+            val best = cands.firstOrNull { it.contains("3.8-flash") } ?: cands.firstOrNull { it.contains("3-flash") } ?: cands.firstOrNull { it.contains("3.5-flash") } ?: cands.firstOrNull()
+            if (best != null) best to null else null to "No flash model in ${cands.size}"
+        } catch (e: Exception) { null to (e.message ?: "Net err") }
+    }
     fun analyze(bmp: Bitmap, rawPts: List<PointF>, apiKey: String): GeminiCourseResult {
         if (rawPts.isEmpty()) return GeminiCourseResult(rawPts, emptyList(), null, 0, "Нет точек")
+        val (model, mErr) = pickModel(apiKey)
+        if (model == null) return GeminiCourseResult(rawPts, rawPts.indices.map { "${it + 1}" }, null, 0, mErr)
         val b64 = Base64.encodeToString(makeLabeledJpeg(bmp, rawPts), Base64.NO_WRAP)
-        val prompt = "Orienteering map with cyan letter markers (A,B,C...) on detected circles. Follow magenta lines and numbers (1,2,3...) and read the legend table (seq -> control code like 31,32). Return JSON: {\"course\":[{\"seq\":1,\"marker\":\"A\",\"code\":\"31\"}],\"finish_marker\":\"X\"}"
+        val prompt = "Orienteering map with cyan letter markers (A,B,C...) on detected circles. Follow magenta lines and numbers (1,2,3...) and read legend table (seq -> control code like 31,32). Return JSON: {\"course\":[{\"seq\":1,\"marker\":\"A\",\"code\":\"31\"}],\"finish_marker\":\"X\"}"
         val req = JSONObject().put("contents", JSONArray().put(JSONObject().put("parts", JSONArray().put(JSONObject().put("text", prompt)).put(JSONObject().put("inline_data", JSONObject().put("mime_type", "image/jpeg").put("data", b64)))))).put("generationConfig", JSONObject().put("responseMimeType", "application/json").put("temperature", 0.1))
-        var respText: String? = null; var lastErr = "Network error"
-        for (model in listOf("gemini-3.6-flash", "gemini-2.5-flash")) {
-            try {
-                val u = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
-                val conn = (u.openConnection() as HttpURLConnection).apply { requestMethod = "POST"; doOutput = true; connectTimeout = 15000; readTimeout = 45000; setRequestProperty("Content-Type", "application/json"); setRequestProperty("x-goog-api-key", apiKey.trim()) }
-                conn.outputStream.use { it.write(req.toString().toByteArray()) }
-                if (conn.responseCode == 200) { respText = conn.inputStream.bufferedReader().readText(); break }
-                else lastErr = "HTTP ${conn.responseCode}: ${conn.errorStream?.bufferedReader()?.readText()?.take(120)}"
-            } catch (e: Exception) { lastErr = e.message ?: "Err" }
-        }
-        if (respText == null) return GeminiCourseResult(rawPts, rawPts.indices.map { "${it + 1}" }, null, 0, lastErr)
         return try {
-            val txt = JSONObject(respText).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
+            val u = URL("https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+            val conn = (u.openConnection() as HttpURLConnection).apply { requestMethod = "POST"; doOutput = true; connectTimeout = 15000; readTimeout = 45000; setRequestProperty("Content-Type", "application/json"); setRequestProperty("x-goog-api-key", apiKey.trim()) }
+            conn.outputStream.use { it.write(req.toString().toByteArray()) }
+            if (conn.responseCode != 200) return GeminiCourseResult(rawPts, rawPts.indices.map { "${it + 1}" }, null, 0, "$model HTTP ${conn.responseCode}: ${conn.errorStream?.bufferedReader()?.readText()?.take(160)}")
+            val txt = JSONObject(conn.inputStream.bufferedReader().readText()).getJSONArray("candidates").getJSONObject(0).getJSONObject("content").getJSONArray("parts").getJSONObject(0).getString("text")
             val obj = JSONObject(txt); val arr = obj.getJSONArray("course"); val finTag = obj.optString("finish_marker", "")
             val tagMap = HashMap<String, Int>(); rawPts.indices.forEach { tagMap[tag(it)] = it }
             val ptsOut = mutableListOf<PointF>(); val lblOut = mutableListOf<String>(); val used = mutableSetOf<Int>()
@@ -65,6 +76,6 @@ object GeminiCourseAnalyzer {
             val finIdx = tagMap[finTag.trim()]; val finPt = if (finIdx != null) rawPts[finIdx] else null
             rawPts.indices.forEach { i -> if (i !in used && i != finIdx) { ptsOut.add(rawPts[i]); lblOut.add("?") } }
             GeminiCourseResult(ptsOut, lblOut, finPt, legCnt)
-        } catch (e: Exception) { GeminiCourseResult(rawPts, rawPts.indices.map { "${it + 1}" }, null, 0, e.message) }
+        } catch (e: Exception) { GeminiCourseResult(rawPts, rawPts.indices.map { "${it + 1}" }, null, 0, "$model: ${e.message}") }
     }
 }

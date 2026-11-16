@@ -26,7 +26,7 @@ object LocalMapMatcher {
         Utils.bitmapToMat(bmp, rgba); Imgproc.cvtColor(rgba, rgb, Imgproc.COLOR_RGBA2RGB); Imgproc.cvtColor(rgb, hsv, Imgproc.COLOR_RGB2HSV)
         Core.inRange(hsv, Scalar(86.0, 40.0, 145.0), Scalar(116.0, 255.0, 255.0), water)
         if (isScan) Core.inRange(hsv, Scalar(18.0, 50.0, 140.0), Scalar(35.0, 255.0, 255.0), openField)
-        else Core.inRange(hsv, Scalar(0.0, 0.0, 225.0), Scalar(180.0, 35.0, 255.0), openField)
+        else { val g = Mat(); Imgproc.cvtColor(rgba, g, Imgproc.COLOR_RGBA2GRAY); Imgproc.Canny(g, openField, 60.0, 150.0); g.release() }
         Core.addWeighted(water, 0.75, openField, 0.25, 0.0, out)
         Imgproc.GaussianBlur(out, out, Size(5.0, 5.0), 1.5)
         rgba.release(); rgb.release(); hsv.release(); water.release(); openField.release()
