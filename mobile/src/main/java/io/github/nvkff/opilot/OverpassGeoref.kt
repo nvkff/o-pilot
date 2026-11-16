@@ -84,3 +84,24 @@ object OverpassGeoref {
         return best
     }
 }
+        var best: GeoPlacement? = null
+        for (wM in listOf(900.0, 1200.0, 1500.0, 1800.0, 2200.0, 2600.0)) {
+            val tw = (wM / mPerPx).toInt()
+            val th = (tw * scanBmp.height.toDouble() / scanBmp.width).toInt()
+            if (tw < 40 || th < 40 || tw >= gridSz || th >= gridSz) continue
+            val tpl = Mat(); Imgproc.resize(scanMask, tpl, Size(tw.toDouble(), th.toDouble()))
+            val res = Mat(gridSz - th + 1, gridSz - tw + 1, CvType.CV_32FC1)
+            Imgproc.matchTemplate(osmGray, tpl, res, Imgproc.TM_CCOEFF_NORMED)
+            val mm = Core.minMaxLoc(res)
+            if (best == null || mm.maxVal > best.score) {
+                val cx = mm.maxLoc.x + tw / 2.0; val cy = mm.maxLoc.y + th / 2.0
+                val lon = minLon + (cx / gridSz) * dLon
+                val lat = minLat + ((gridSz - cy) / gridSz) * dLat
+                best = GeoPlacement(lat, lon, wM, mm.maxVal)
+            }
+            tpl.release(); res.release()
+        }
+        osmGray.release(); scanMask.release()
+        return best
+    }
+}
