@@ -5,29 +5,22 @@
     android:background="#000000">
     <org.osmdroid.views.MapView android:id="@+id/mapView" android:layout_width="match_parent" android:layout_height="match_parent" />
     <io.github.nvkff.opilot.MapOverlayView android:id="@+id/overlayView" android:layout_width="match_parent" android:layout_height="match_parent" />
-    <LinearLayout
-        android:id="@+id/topBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="10dp"
-        android:background="#CC121417">
+    <LinearLayout android:id="@+id/topBar" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="8dp" android:background="#CC121417">
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal">
-            <Button android:id="@+id/btnLayer" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp" android:text="Спутник" android:textSize="11sp" android:layout_marginEnd="4dp" />
-            <Button android:id="@+id/btnBringHere" android:layout_width="0dp" android:layout_weight="1" android:layout_height="40dp" android:text="Скан сюда" android:textSize="11sp" android:layout_marginEnd="4dp" />
-            <Button android:id="@+id/btnAutoAlign" android:layout_width="0dp" android:layout_weight="1.2" android:layout_height="40dp" android:text="Авто-привязка" android:textSize="11sp" />
+            <Button android:id="@+id/btnLayer" android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp" android:text="Спутник" android:textSize="11sp" android:layout_marginEnd="4dp" />
+            <Button android:id="@+id/btnBringHere" android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp" android:text="Скан сюда" android:textSize="11sp" android:layout_marginEnd="4dp" />
+            <Button android:id="@+id/btnAutoAlign" android:layout_width="0dp" android:layout_weight="1.1" android:layout_height="38dp" android:text="Авто" android:textSize="11sp" />
         </LinearLayout>
         <SeekBar android:id="@+id/seekAlpha" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="255" android:progress="165" android:layout_marginTop="4dp" />
-        <TextView android:id="@+id/tvGeorefInfo" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Наведи карту на район старта" android:textColor="#D0D7DE" android:textSize="12sp" />
+        <TextView android:id="@+id/tvGeorefInfo" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Наведи карту на район" android:textColor="#D0D7DE" android:textSize="12sp" />
     </LinearLayout>
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:orientation="horizontal"
-        android:padding="10dp"
-        android:background="#CC121417">
-        <Button android:id="@+id/btnMode" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:text="Режим: Карта" android:textSize="12sp" android:layout_marginEnd="6dp" />
-        <Button android:id="@+id/btnDone" android:layout_width="0dp" android:layout_weight="1" android:layout_height="44dp" android:text="Готово (КП)" android:textSize="12sp" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_alignParentBottom="true" android:orientation="vertical" android:padding="8dp" android:background="#CC121417">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginBottom="4dp">
+            <Button android:id="@+id/btnModeMap" android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp" android:text="Карта" android:textSize="11sp" android:layout_marginEnd="3dp" />
+            <Button android:id="@+id/btnModeScan" android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp" android:text="Скан 2п" android:textSize="11sp" android:layout_marginEnd="3dp" />
+            <Button android:id="@+id/btnModeCp" android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp" android:text="КП +-" android:textSize="11sp" android:layout_marginEnd="3dp" />
+            <Button android:id="@+id/btnMode2Pt" android:layout_width="0dp" android:layout_weight="1" android:layout_height="38dp" android:text="2 точки" android:textSize="11sp" />
+        </LinearLayout>
+        <Button android:id="@+id/btnDone" android:layout_width="match_parent" android:layout_height="42dp" android:text="Готово (сохранить КП)" android:textSize="13sp" />
     </LinearLayout>
 </RelativeLayout>

@@ -16,13 +16,13 @@ object OverpassGeoref {
         val s = lat - rDeg; val n = lat + rDeg
         val lonR = rDeg / cos(Math.toRadians(lat)).coerceAtLeast(0.2)
         val w = lon - lonR; val e = lon + lonR
-        val q = "[out:json][timeout:15];(way[\"highway\"]($s,$w,$n,$e);way[\"natural\"=\"water\"]($s,$w,$n,$e);way[\"waterway\"]($s,$w,$n,$e););out geom;"
-        val urls = listOf("https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://lz4.overpass-api.de/api/interpreter", "https://overpass-api.de/api/interpreter")
+        val q = "[out:json][timeout:12];(way[\"highway\"=\"primary\"]($s,$w,$n,$e);way[\"highway\"=\"secondary\"]($s,$w,$n,$e);way[\"highway\"=\"tertiary\"]($s,$w,$n,$e);way[\"highway\"=\"unclassified\"]($s,$w,$n,$e);way[\"highway\"=\"track\"]($s,$w,$n,$e);way[\"railway\"]($s,$w,$n,$e);way[\"natural\"=\"water\"]($s,$w,$n,$e););out geom;"
+        val urls = listOf("https://overpass-api.de/api/interpreter", "https://lz4.overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter")
         var body: String? = null; var lastErr = "Network error"
         for (u in urls) {
             try {
                 val conn = (URL(u).openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 16000
+                    requestMethod = "POST"; doOutput = true; connectTimeout = 8000; readTimeout = 15000
                     setRequestProperty("User-Agent", "O-Pilot/1.0")
                     setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
                 }
@@ -35,7 +35,7 @@ object OverpassGeoref {
         val out = mutableListOf<OsmWay>()
         for (i in 0 until els.length()) {
             val el = els.getJSONObject(i); val tags = el.optJSONObject("tags") ?: continue; val geom = el.optJSONArray("geometry") ?: continue
-            val t = if (tags.has("highway")) 1 else 2
+            val t = if (tags.optString("natural") == "water") 2 else 1
             val pts = ArrayList<Pair<Double, Double>>(geom.length())
             for (j in 0 until geom.length()) { val g = geom.getJSONObject(j); pts.add(g.getDouble("lat") to g.getDouble("lon")) }
             if (pts.size >= 2) out.add(OsmWay(t, pts))

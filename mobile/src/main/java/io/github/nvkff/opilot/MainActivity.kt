@@ -21,6 +21,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnAnalyze: Button
     private var currentBitmap: Bitmap? = null
     private var detectedCps: List<PointF> = emptyList()
+    private var detectedLabels: List<String> = emptyList()
     private var detectedScale = 0
     private var isAnalyzed = false
 
@@ -29,10 +30,8 @@ class MainActivity : AppCompatActivity() {
     }
     private val galleryLauncher = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> if (uri != null) processUri(uri, false) }
     private val pdfLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) processUri(uri, true) }
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        super.onCreate(savedInstanceState); setContentView(R.layout.activity_main)
         tvStatus = findViewById(R.id.tvStatus); ivPreview = findViewById(R.id.ivPreview); btnAnalyze = findViewById(R.id.btnAnalyze)
         tvStatus.text = if (OpenCVLoader.initLocal()) "OpenCV 4.12 готов к работе" else "Ошибка OpenCV"
         findViewById<Button>(R.id.btnScanCamera).setOnClickListener { startScanner() }
@@ -58,29 +57,32 @@ class MainActivity : AppCompatActivity() {
                 loaded?.also { MapLoader.saveWorkingMap(this@MainActivity, it) }
             }
             if (bmp != null) {
-                currentBitmap = bmp; isAnalyzed = false; detectedScale = 0; ivPreview.setImageBitmap(bmp)
-                btnAnalyze.text = "Далее: поиск КП и севера (OpenCV)"; btnAnalyze.visibility = View.VISIBLE
-                tvStatus.text = "Карта: ${bmp.width}x${bmp.height} px"
+                currentBitmap = bmp; isAnalyzed = false; detectedScale = 0; detectedLabels = emptyList(); ivPreview.setImageBitmap(bmp)
+                btnAnalyze.text = "Далее: поиск КП и севера (OpenCV)"; btnAnalyze.visibility = View.VISIBLE; tvStatus.text = "Карта: ${bmp.width}x${bmp.height} px"
             } else tvStatus.text = "Не удалось открыть файл"
         }
     }
     private fun runAnalysis() {
-        val bmp = currentBitmap ?: return; tvStatus.text = "Анализ OpenCV и масштаба..."
+        val bmp = currentBitmap ?: return; tvStatus.text = "Анализ КП, линий, легенды и масштаба..."
         CoroutineScope(Dispatchers.Main).launch {
             val res = withContext(Dispatchers.Default) { MapAnalyzer.analyze(bmp) }
             withContext(Dispatchers.IO) { MapLoader.saveWorkingMap(this@MainActivity, res.alignedBitmap) }
-            currentBitmap = res.alignedBitmap; detectedCps = res.controlPoints; isAnalyzed = true
-            ivPreview.setImageBitmap(res.previewBitmap); btnAnalyze.text = "Далее: привязка к карте"
-            ScaleDetector.detect(res.alignedBitmap) { sc ->
-                detectedScale = sc
-                val scTxt = if (sc > 0) "1:$sc" else "не найден"
-                tvStatus.text = "КП: ${res.controlPoints.size} · Масштаб: $scTxt · Поворот: ${res.rotationDeg}°"
+            withContext(Dispatchers.Default) {
+                CourseOrderer.orderAndExtract(res.alignedBitmap, res.controlPoints) { course ->
+                    CoroutineScope(Dispatchers.Main).launch {
+                        currentBitmap = res.alignedBitmap; detectedCps = course.points; detectedLabels = course.labels; detectedScale = course.scale; isAnalyzed = true
+                        val marked = withContext(Dispatchers.Default) { MapAnalyzer.drawMarkers(res.alignedBitmap, course.points, course.labels) }
+                        ivPreview.setImageBitmap(marked); btnAnalyze.text = "Далее: привязка к карте"
+                        val scTxt = if (course.scale > 0) "1:${course.scale}" else "нет"
+                        tvStatus.text = "КП: ${course.points.size} · Легенда: ${course.legendCount} · Масштаб: $scTxt"
+                    }
+                }
             }
         }
     }
     private fun openGeoref() {
         val arr = FloatArray(detectedCps.size * 2)
         detectedCps.forEachIndexed { i, p -> arr[i * 2] = p.x; arr[i * 2 + 1] = p.y }
-        startActivity(Intent(this, GeorefActivity::class.java).putExtra("cps", arr).putExtra("scale", detectedScale))
+        startActivity(Intent(this, GeorefActivity::class.java).putExtra("cps", arr).putStringArrayListExtra("labels", ArrayList(detectedLabels)).putExtra("scale", detectedScale))
     }
 }
