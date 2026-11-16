@@ -14,15 +14,9 @@ import kotlin.math.*
 
 class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet? = null) : View(ctx, attrs) {
     enum class Mode { MAP, ADJUST_SCAN, EDIT_CP, TWO_PT }
-    var mode = Mode.MAP
-    var mapViewRef: MapView? = null
-    var onStatus: ((String) -> Unit)? = null
-    var loupeTopY = 250f
-    private var bmp: Bitmap? = null
-    private val cps = mutableListOf<PointF>()
-    private var labels = listOf<String>()
-    var centerGeo = GeoPoint(55.7558, 37.6173)
-    var widthMeters = 1800.0; var rotationDeg = 0f
+    var mode = Mode.MAP; var mapViewRef: MapView? = null; var onStatus: ((String) -> Unit)? = null; var loupeTopY = 250f
+    private var bmp: Bitmap? = null; private val cps = mutableListOf<PointF>(); private var labels = listOf<String>()
+    var centerGeo = GeoPoint(55.7558, 37.6173); var widthMeters = 1800.0; var rotationDeg = 0f
     private var twoPtStep = 0; private var sPt1: PointF? = null; private var mGeo1: GeoPoint? = null; private var sPt2: PointF? = null
     private val matrix = Matrix()
     private val imgPaint = Paint().apply { alpha = 165; isFilterBitmap = true }
@@ -42,7 +36,7 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
         }
     })
     fun setMap(bitmap: Bitmap, points: List<PointF>, center: GeoPoint, cpLabels: List<String> = emptyList()) { bmp = bitmap; cps.clear(); cps.addAll(points); labels = cpLabels; centerGeo = center; invalidate() }
-    fun startTwoPt() { twoPtStep = 0; sPt1 = null; mGeo1 = null; sPt2 = null; mode = Mode.TWO_PT; onStatus?.invoke("2Т (1/4): зажми или тапни ориентир НА СКАНЕ"); invalidate() }
+    fun startTwoPt() { twoPtStep = 0; sPt1 = null; mGeo1 = null; sPt2 = null; mode = Mode.TWO_PT; onStatus?.invoke("2Т (1/4): зажми ориентир НА СКАНЕ"); invalidate() }
     fun setOverlayAlpha(a: Int) { imgPaint.alpha = a; invalidate() }
     fun setPlacement(c: GeoPoint, wMeters: Double, rot: Float = 0f) { centerGeo = c; widthMeters = wMeters; rotationDeg = rot; invalidate() }
     private fun rebuildMatrix() {
@@ -85,7 +79,7 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
     }
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (mode == Mode.MAP) return false
-        if (mode == Mode.EDIT_CP || mode == Mode.TWO_PT) {
+        if (mode in listOf(Mode.EDIT_CP, Mode.TWO_PT)) {
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; loupeX = e.x; loupeY = e.y; loupeActive = false; postDelayed(loupeRun, 180L); tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
                 MotionEvent.ACTION_POINTER_DOWN -> { removeCallbacks(loupeRun); loupeActive = false; invalidate(); mapViewRef?.dispatchTouchEvent(e) }
@@ -143,34 +137,3 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
     private fun dist(e: MotionEvent) = hypot((e.getX(1) - e.getX(0)).toDouble(), (e.getY(1) - e.getY(0)).toDouble()).toFloat()
     private fun ang(e: MotionEvent) = Math.toDegrees(atan2((e.getY(1) - e.getY(0)).toDouble(), (e.getX(1) - e.getX(0)).toDouble())).toFloat()
 }
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (mode == Mode.MAP) return false
-        if (mode in listOf(Mode.EDIT_CP, Mode.TWO_PT)) {
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { downX = e.x; downY = e.y; loupeX = e.x; loupeY = e.y; loupeActive = false; postDelayed(loupeRun, 180L); tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
-                MotionEvent.ACTION_POINTER_DOWN -> { removeCallbacks(loupeRun); loupeActive = false; invalidate(); mapViewRef?.dispatchTouchEvent(e) }
-                MotionEvent.ACTION_MOVE -> if (loupeActive) { loupeX = e.x; loupeY = e.y; invalidate() } else { if (hypot((e.x - downX).toDouble(), (e.y - downY).toDouble()) > 18.0) removeCallbacks(loupeRun); tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    removeCallbacks(loupeRun)
-                    if (loupeActive) {
-                        loupeActive = false; val cEv = MotionEvent.obtain(e); cEv.action = MotionEvent.ACTION_CANCEL; mapViewRef?.dispatchTouchEvent(cEv); cEv.recycle()
-                        if (e.actionMasked == MotionEvent.ACTION_UP) { if (mode == Mode.EDIT_CP) handleCpTap(e.x, e.y) else handleTwoPtTap(e.x, e.y) }
-                        invalidate()
-                    } else { tapDetector.onTouchEvent(e); mapViewRef?.dispatchTouchEvent(e) }
-                }
-                else -> mapViewRef?.dispatchTouchEvent(e)
-            }
-            return true
-        }
-        when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { lx = e.x; ly = e.y; multi = false }
-            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2) { multi = true; lastDist = dist(e); lastAng = ang(e) }
-            MotionEvent.ACTION_MOVE -> {
-                if (e.pointerCount == 1) if (!multi) { mapViewRef?.projection?.let { val pc = it.toPixels(centerGeo, null); val ng = it.fromPixels((pc.x + (e.x - lx)).toInt(), (pc.y + (e.y - ly)).toInt()); centerGeo = GeoPoint(ng.latitude, ng.longitude) }; lx = e.x; ly = e.y }
-                if (e.pointerCount == 2) { val d = dist(e); val a = ang(e); if (lastDist > 10f) widthMeters = (widthMeters * (d / lastDist)).coerceIn(100.0, 25000.0); rotationDeg += (a - lastAng); lastDist = d; lastAng = a }
-                invalidate()
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> if (e.pointerCount <= 1) multi = false
-        }
-        return true
-    }
