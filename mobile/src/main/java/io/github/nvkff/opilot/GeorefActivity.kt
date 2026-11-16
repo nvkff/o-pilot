@@ -98,11 +98,18 @@ class GeorefActivity : AppCompatActivity() {
         }
     }
     private fun finishGeoref() {
-        val cps = overlayView.exportControlPoints(mapView.projection); val arr = JSONArray()
-        cps.forEach { cp -> arr.put(JSONObject().put("id", cp.id).put("label", cp.label).put("lat", cp.lat).put("lon", cp.lon).put("taken", false)) }
-        File(filesDir, "current_route.json").writeText(arr.toString())
-        val summary = if (cps.isEmpty()) "КП не отмечены" else cps.joinToString("\n") { String.format(Locale.US, "%s: %.5f, %.5f", it.label, it.lat, it.lon) }
-        AlertDialog.Builder(this).setTitle("Сохранено (${cps.size} КП)").setMessage(summary).setPositiveButton("Ок", null).show()
+        val cps = overlayView.exportSavedCps(mapView.projection)
+        val et = EditText(this).apply { setText("Карта ${MapProjectStorage.loadAll(this@GeorefActivity).size + 1}") }
+        AlertDialog.Builder(this).setTitle("Сохранить карту (${cps.size} КП)").setView(et)
+            .setPositiveButton("В навигацию") { _, _ ->
+                val pid = "map_${System.currentTimeMillis()}"
+                val name = et.text.toString().trim().ifEmpty { "Карта" }
+                val pr = MapProject(pid, name, overlayView.centerGeo.latitude, overlayView.centerGeo.longitude, overlayView.widthMeters, overlayView.rotationDeg, true, cps)
+                MapProjectStorage.save(this, pr, scanBmp)
+                startActivity(android.content.Intent(this, NavActivity::class.java).putExtra("project_id", pid))
+                finish()
+            }
+            .setNegativeButton("Отмена", null).show()
     }
     override fun onResume() { super.onResume(); mapView.onResume() }
     override fun onPause() { super.onPause(); mapView.onPause() }

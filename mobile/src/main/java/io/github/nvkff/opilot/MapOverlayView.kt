@@ -50,6 +50,14 @@ class MapOverlayView @JvmOverloads constructor(ctx: Context, attrs: AttributeSet
         matrix.reset(); matrix.postTranslate(-b.width / 2f, -b.height / 2f); matrix.postScale(s, s)
         matrix.postRotate(rotationDeg); matrix.postTranslate(pC.x.toFloat(), pC.y.toFloat())
     }
+    fun exportSavedCps(proj: org.osmdroid.views.Projection): MutableList<SavedCp> {
+        rebuildMatrix()
+        return cps.mapIndexed { idx, pt ->
+            val arr = floatArrayOf(pt.x, pt.y); matrix.mapPoints(arr)
+            val g = proj.fromPixels(arr[0].toInt(), arr[1].toInt())
+            SavedCp(idx + 1, labels.getOrNull(idx) ?: "${idx + 1}", g.latitude, g.longitude, pt.x, pt.y, false)
+        }.toMutableList()
+    }
     fun exportControlPoints(proj: org.osmdroid.views.Projection): List<ControlPoint> {
         rebuildMatrix()
         return cps.mapIndexed { idx, p ->

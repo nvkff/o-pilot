@@ -15,5 +15,8 @@
             </intent-filter>
         </activity>
         <activity android:name=".GeorefActivity" android:exported="false" />
+        <activity android:name=".NavActivity" android:exported="false" />
+        <activity android:name=".NavActivity" android:exported="false" />
+        <activity android:name=".NavActivity" android:exported="false" />
     </application>
 </manifest>

@@ -35,6 +35,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState); setContentView(R.layout.activity_main)
         tvStatus = findViewById(R.id.tvStatus); ivPreview = findViewById(R.id.ivPreview); btnAnalyze = findViewById(R.id.btnAnalyze)
         tvStatus.text = if (OpenCVLoader.initLocal()) "OpenCV 4.12 готов к работе" else "Ошибка OpenCV"
+        findViewById<Button>(R.id.btnLibrary).setOnClickListener { openLibrary() }
         findViewById<Button>(R.id.btnGeminiKey).setOnClickListener { askApiKey() }
         findViewById<Button>(R.id.btnScanCamera).setOnClickListener { startScanner() }
         findViewById<Button>(R.id.btnPickGallery).setOnClickListener { askGalleryMode() }
@@ -93,5 +94,22 @@ class MainActivity : AppCompatActivity() {
     private fun openGeoref() {
         val arr = FloatArray(detectedCps.size * 2); detectedCps.forEachIndexed { i, p -> arr[i * 2] = p.x; arr[i * 2 + 1] = p.y }
         startActivity(Intent(this, GeorefActivity::class.java).putExtra("cps", arr).putStringArrayListExtra("labels", ArrayList(detectedLabels)).putExtra("scale", detectedScale))
+    }
+    override fun onResume() {
+        super.onResume()
+        val cnt = MapProjectStorage.loadAll(this).size
+        findViewById<Button>(R.id.btnLibrary).text = if (cnt > 0) "Мои карты ($cnt)" else "Мои карты"
+    }
+    private fun openLibrary() {
+        val list = MapProjectStorage.loadAll(this)
+        if (list.isEmpty()) { Toast.makeText(this, "Пока нет сохранённых карт", Toast.LENGTH_SHORT).show(); return }
+        val titles = list.map { "${it.name} (${it.cps.size} КП)" }.toTypedArray()
+        AlertDialog.Builder(this).setTitle("Мои карты").setItems(titles) { _, idx ->
+            val pr = list[idx]
+            AlertDialog.Builder(this).setTitle(pr.name)
+                .setPositiveButton("Навигация") { _, _ -> startActivity(Intent(this, NavActivity::class.java).putExtra("project_id", pr.id)) }
+                .setNegativeButton("Удалить") { _, _ -> MapProjectStorage.delete(this, pr.id); onResume() }
+                .setNeutralButton("Отмена", null).show()
+        }.show()
     }
 }

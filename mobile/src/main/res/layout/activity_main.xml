@@ -7,7 +7,8 @@
     android:background="#121417">
     <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
         <TextView android:id="@+id/tvTitle" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content" android:text="O-Pilot" android:textColor="#FFFFFF" android:textSize="26sp" android:textStyle="bold" />
-        <Button android:id="@+id/btnGeminiKey" android:layout_width="wrap_content" android:layout_height="38dp" android:text="Gemini AI" android:textSize="11sp" />
+        <Button android:id="@+id/btnLibrary" android:layout_width="wrap_content" android:layout_height="38dp" android:text="Мои карты" android:textSize="11sp" android:layout_marginEnd="6dp" />
+        <Button android:id="@+id/btnGeminiKey" android:layout_width="wrap_content" android:layout_height="38dp" android:text="AI" android:textSize="11sp" />
     </LinearLayout>
     <TextView android:id="@+id/tvStatus" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Init..." android:textColor="#9AA4B2" android:textSize="13sp" android:layout_marginBottom="10dp" />
     <ImageView android:id="@+id/ivPreview" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:scaleType="fitCenter" android:background="#1C2026" android:layout_marginBottom="10dp" />

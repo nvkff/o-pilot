@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#0D1117">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1.15">
+        <io.github.nvkff.opilot.NavMapView android:id="@+id/navMapView" android:layout_width="match_parent" android:layout_height="match_parent" />
+        <Button android:id="@+id/btnToggleGps" android:layout_width="wrap_content" android:layout_height="34dp" android:layout_gravity="end" android:layout_margin="8dp" android:text="GPS: ВКЛ" android:textSize="11sp" />
+    </FrameLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:orientation="vertical" android:gravity="center_horizontal" android:padding="12dp" android:background="#12161D">
+        <TextView android:id="@+id/tvTargetTitle" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Цель: -" android:textColor="#FFFFFF" android:textSize="18sp" android:textStyle="bold" />
+        <TextView android:id="@+id/tvTargetStats" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Поиск GPS..." android:textColor="#8B949E" android:textSize="14sp" android:layout_marginBottom="4dp" />
+        <io.github.nvkff.opilot.SportsCompassView android:id="@+id/compassView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:layout_marginTop="6dp">
+            <Button android:id="@+id/btnPrevCp" android:layout_width="0dp" android:layout_weight="0.8" android:layout_height="46dp" android:text="&lt;" android:textSize="16sp" android:layout_marginEnd="6dp" />
+            <Button android:id="@+id/btnTakeCp" android:layout_width="0dp" android:layout_weight="2" android:layout_height="46dp" android:text="КП ВЗЯТ ✓" android:textSize="14sp" android:layout_marginEnd="6dp" />
+            <Button android:id="@+id/btnNextCp" android:layout_width="0dp" android:layout_weight="0.8" android:layout_height="46dp" android:text="&gt;" android:textSize="16sp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
